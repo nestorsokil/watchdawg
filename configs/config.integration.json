@@ -7,15 +7,15 @@
       "retries": 0,
       "timeout": 2000000000,
       "http": {
-        "url": "http://integration-tests:8080/health",
+        "url": "http://integration-tests:8080/target/health",
         "method": "GET"
       },
       "on_success": {
-        "url": "http://integration-tests:9090/success",
+        "url": "http://integration-tests:9090/callback/success",
         "method": "POST"
       },
       "on_failure": {
-        "url": "http://integration-tests:9090/failure",
+        "url": "http://integration-tests:9090/callback/failure",
         "method": "POST"
       }
     }

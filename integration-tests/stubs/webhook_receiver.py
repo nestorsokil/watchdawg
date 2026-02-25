@@ -8,7 +8,7 @@ SUCCESS = []
 FAILURE = []
 
 
-@app.route("/success", methods=["POST"])
+@app.route("/callback/success", methods=["POST"])
 def receive_success():
     with _lock:
         SUCCESS.append({
@@ -19,7 +19,7 @@ def receive_success():
     return "", 200
 
 
-@app.route("/failure", methods=["POST"])
+@app.route("/callback/failure", methods=["POST"])
 def receive_failure():
     with _lock:
         FAILURE.append({

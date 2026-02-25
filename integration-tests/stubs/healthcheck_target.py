@@ -7,7 +7,7 @@ _lock = threading.Lock()
 _fail_count = 0
 
 
-@app.route("/health", methods=["GET"])
+@app.route("/target/health", methods=["GET"])
 def health():
     global _fail_count
     with _lock:
