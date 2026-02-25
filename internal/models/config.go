@@ -20,8 +20,9 @@ type HealthCheck struct {
 
 	HTTP      *HTTPCheckConfig     `json:"http,omitempty"`
 	Starlark  *StarlarkCheckConfig `json:"starlark,omitempty"`
-	OnSuccess []HookConfig `json:"on_success,omitempty"`
-	OnFailure []HookConfig `json:"on_failure,omitempty"`
+	Kafka     *KafkaCheckConfig    `json:"kafka,omitempty"`
+	OnSuccess []HookConfig         `json:"on_success,omitempty"`
+	OnFailure []HookConfig         `json:"on_failure,omitempty"`
 }
 
 type CheckType string
@@ -29,8 +30,8 @@ type CheckType string
 const (
 	CheckTypeHTTP     CheckType = "http"
 	CheckTypeStarlark CheckType = "starlark"
-	CheckTypeGRPC     CheckType = "grpc"   // Future implementation
-	CheckTypeKafka    CheckType = "kafka"  // Future implementation
+	CheckTypeGRPC     CheckType = "grpc" // Future implementation
+	CheckTypeKafka    CheckType = "kafka"
 )
 
 type ResponseFormat string
@@ -123,6 +124,28 @@ type StarlarkCheckConfig struct {
 	// Script should return a dict: {"healthy": true/false, "message": "optional message"}
 	Script  string                 `json:"script"`
 	Globals map[string]interface{} `json:"globals,omitempty"`
+}
+
+// KafkaCheckConfig defines a Kafka consumer health check.
+// The check passes if at least one message was received on the configured topic
+// within the schedule interval. While no messages have arrived since startup,
+// the check reports healthy (waiting for first message).
+type KafkaCheckConfig struct {
+	Brokers []string `json:"brokers"`
+	Topic   string   `json:"topic"`
+
+	// GroupID is the Kafka consumer group ID. Defaults to "watchdawg-<check-name>".
+	GroupID string `json:"group_id,omitempty"`
+
+	// Format optionally parses the message value for assertion scripts.
+	// Supported: "json". When set, the parsed value is available as 'result'.
+	Format ResponseFormat `json:"format,omitempty"`
+
+	// Assertion is an optional Starlark script validated against the most recently
+	// received message. Available variables: value (string), key (string),
+	// headers (dict), result (parsed value when format is set).
+	// Supports the same simple-expression and full-script modes as HTTP checks.
+	Assertion string `json:"assertion,omitempty"`
 }
 
 type WebhookConfig struct {

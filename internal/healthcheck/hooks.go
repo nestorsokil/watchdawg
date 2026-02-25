@@ -2,12 +2,15 @@ package healthcheck
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"text/template"
 	"time"
+
+	kafka "github.com/segmentio/kafka-go"
 
 	"watchdawg/internal/models"
 )
@@ -47,7 +50,7 @@ func (n *HookNotifier) executeHook(hook models.HookConfig, result *models.CheckR
 	case hook.HTTP != nil:
 		return n.sendWebhook(hook.HTTP, result)
 	case hook.Kafka != nil:
-		panic("kafka hook: unimplemented")
+		return n.sendKafkaMessage(hook.Kafka, result)
 	default:
 		return fmt.Errorf("hook has no configured type")
 	}
@@ -106,6 +109,47 @@ func (n *HookNotifier) sendWebhook(config *models.WebhookConfig, result *models.
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("webhook returned non-success status: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// sendKafkaMessage publishes a notification message to the configured Kafka topic.
+// The message body is either rendered from MessageTemplate (Go template with
+// CheckResult context) or the full CheckResult marshaled as JSON.
+func (n *HookNotifier) sendKafkaMessage(config *models.KafkaHookConfig, result *models.CheckResult) error {
+	var messageBody string
+	if config.MessageTemplate != "" {
+		tmpl, err := template.New("kafka_hook").Parse(config.MessageTemplate)
+		if err != nil {
+			return fmt.Errorf("failed to parse kafka message template: %w", err)
+		}
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, result); err != nil {
+			return fmt.Errorf("failed to execute kafka message template: %w", err)
+		}
+		messageBody = buf.String()
+	} else {
+		jsonBytes, err := json.Marshal(result)
+		if err != nil {
+			return fmt.Errorf("failed to marshal result to JSON for kafka hook: %w", err)
+		}
+		messageBody = string(jsonBytes)
+	}
+
+	writer := &kafka.Writer{
+		Addr:  kafka.TCP(config.Brokers...),
+		Topic: config.Topic,
+	}
+	defer writer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := writer.WriteMessages(ctx, kafka.Message{
+		Value: []byte(messageBody),
+	}); err != nil {
+		return fmt.Errorf("failed to write kafka hook message to topic '%s': %w", config.Topic, err)
 	}
 
 	return nil

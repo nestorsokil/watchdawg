@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"watchdawg/internal/models"
 )
@@ -58,8 +60,26 @@ func validateConfig(config *models.Config) error {
 			if check.Starlark.Script == "" {
 				return fmt.Errorf("healthcheck[%d] (%s): Starlark script is required", i, check.Name)
 			}
-		case models.CheckTypeGRPC, models.CheckTypeKafka:
-			return fmt.Errorf("healthcheck[%d] (%s): type '%s' not yet implemented", i, check.Name, check.Type)
+		case models.CheckTypeKafka:
+			if check.Kafka == nil {
+				return fmt.Errorf("healthcheck[%d] (%s): kafka config is required for type 'kafka'", i, check.Name)
+			}
+			if len(check.Kafka.Brokers) == 0 {
+				return fmt.Errorf("healthcheck[%d] (%s): at least one kafka broker is required", i, check.Name)
+			}
+			if check.Kafka.Topic == "" {
+				return fmt.Errorf("healthcheck[%d] (%s): kafka topic is required", i, check.Name)
+			}
+			// Kafka checks compare message age against the schedule interval, so the
+			// schedule must be a parseable duration rather than a cron expression.
+			if _, err := parseDuration(check.Schedule); err != nil {
+				return fmt.Errorf("healthcheck[%d] (%s): kafka checks require a duration-format schedule (e.g. '30s', '5m', '1h')", i, check.Name)
+			}
+			if check.Kafka.GroupID == "" {
+				config.HealthChecks[i].Kafka.GroupID = "watchdawg-" + check.Name
+			}
+		case models.CheckTypeGRPC:
+			return fmt.Errorf("healthcheck[%d] (%s): type 'grpc' not yet implemented", i, check.Name)
 		default:
 			return fmt.Errorf("healthcheck[%d] (%s): unknown check type '%s'", i, check.Name, check.Type)
 		}
@@ -84,6 +104,13 @@ func validateConfig(config *models.Config) error {
 	}
 
 	return nil
+}
+
+// parseDuration parses duration-format schedules like "30s", "5m", "2h".
+// Returns an error if the schedule is not a valid duration string.
+func parseDuration(schedule string) (time.Duration, error) {
+	schedule = strings.TrimSpace(schedule)
+	return time.ParseDuration(schedule)
 }
 
 func validateHookConfig(fieldName string, hook models.HookConfig) error {

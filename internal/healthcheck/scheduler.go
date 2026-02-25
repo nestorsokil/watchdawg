@@ -16,6 +16,7 @@ type Scheduler struct {
 	cron            *cron.Cron
 	httpChecker     *HTTPChecker
 	starlarkChecker *StarlarkChecker
+	kafkaChecker    *KafkaChecker
 	notifier        *HookNotifier
 }
 
@@ -24,11 +25,20 @@ func NewScheduler() *Scheduler {
 		cron:            cron.New(cron.WithSeconds()),
 		httpChecker:     NewHTTPChecker(),
 		starlarkChecker: NewStarlarkChecker(),
+		kafkaChecker:    NewKafkaChecker(),
 		notifier:        NewHookNotifier(),
 	}
 }
 
 func (s *Scheduler) AddHealthCheck(check models.HealthCheck) error {
+	// Kafka checks require a background consumer started before the first
+	// scheduled tick so the consumer is already listening when Execute runs.
+	if check.Type == models.CheckTypeKafka {
+		if err := s.kafkaChecker.StartConsumer(check); err != nil {
+			return fmt.Errorf("failed to start kafka consumer for check '%s': %w", check.Name, err)
+		}
+	}
+
 	schedule := s.parseSchedule(check.Schedule)
 
 	_, err := s.cron.AddFunc(schedule, func() {
@@ -52,6 +62,7 @@ func (s *Scheduler) Stop() {
 	log.Println("Stopping health check scheduler...")
 	ctx := s.cron.Stop()
 	<-ctx.Done()
+	s.kafkaChecker.Stop()
 	log.Println("Scheduler stopped")
 }
 
@@ -97,6 +108,8 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 		result = s.httpChecker.Execute(ctx, &check)
 	case models.CheckTypeStarlark:
 		result = s.starlarkChecker.Execute(ctx, &check)
+	case models.CheckTypeKafka:
+		result = s.kafkaChecker.Execute(ctx, &check)
 	default:
 		log.Printf("ERROR: Unknown check type '%s' for check '%s'", check.Type, check.Name)
 		return
