@@ -8,7 +8,6 @@ import (
 	"watchdawg/internal/models"
 )
 
-// LoadFromFile loads configuration from a JSON file
 func LoadFromFile(path string) (*models.Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -27,7 +26,6 @@ func LoadFromFile(path string) (*models.Config, error) {
 	return &config, nil
 }
 
-// validateConfig performs basic validation on the configuration
 func validateConfig(config *models.Config) error {
 	if len(config.HealthChecks) == 0 {
 		return fmt.Errorf("no health checks defined")
@@ -51,7 +49,7 @@ func validateConfig(config *models.Config) error {
 				return fmt.Errorf("healthcheck[%d] (%s): HTTP URL is required", i, check.Name)
 			}
 			if check.HTTP.Method == "" {
-				check.HTTP.Method = "GET" // Default to GET
+				check.HTTP.Method = "GET"
 			}
 		case models.CheckTypeStarlark:
 			if check.Starlark == nil {
@@ -66,7 +64,6 @@ func validateConfig(config *models.Config) error {
 			return fmt.Errorf("healthcheck[%d] (%s): unknown check type '%s'", i, check.Name, check.Type)
 		}
 
-		// Set defaults
 		if check.Retries < 0 {
 			check.Retries = 0
 		}

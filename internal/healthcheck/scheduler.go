@@ -55,15 +55,12 @@ func (s *Scheduler) Stop() {
 	log.Println("Scheduler stopped")
 }
 
-// parseSchedule converts user-friendly schedule format to cron format
 func (s *Scheduler) parseSchedule(schedule string) string {
 	schedule = strings.TrimSpace(schedule)
 
-	// Check if it's an interval format like "30s", "5m", "1h"
 	if strings.HasSuffix(schedule, "s") || strings.HasSuffix(schedule, "m") || strings.HasSuffix(schedule, "h") {
 		duration, err := time.ParseDuration(schedule)
 		if err == nil {
-			// Convert interval to cron format
 			seconds := int(duration.Seconds())
 			if seconds < 60 {
 				return fmt.Sprintf("*/%d * * * * *", seconds)
@@ -77,19 +74,16 @@ func (s *Scheduler) parseSchedule(schedule string) string {
 		}
 	}
 
-	// Assume it's already in cron format
 	// Standard cron: "minute hour day month weekday"
 	// We support: "second minute hour day month weekday"
 	parts := strings.Fields(schedule)
 	if len(parts) == 5 {
-		// Standard cron format, add seconds
 		return "0 " + schedule
 	}
 
 	return schedule
 }
 
-// executeHealthCheck runs a single health check and handles notifications
 func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 	log.Printf("Executing health check: %s", check.Name)
 
@@ -98,7 +92,6 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 
 	var result *models.CheckResult
 
-	// Execute the appropriate checker based on type
 	switch check.Type {
 	case models.CheckTypeHTTP:
 		result = s.httpChecker.Execute(ctx, &check)
@@ -109,7 +102,6 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 		return
 	}
 
-	// Log the result
 	if result.Healthy {
 		log.Printf("✓ Health check '%s' PASSED: %s (took %dms)", check.Name, result.Message, result.Duration)
 	} else {
@@ -119,7 +111,6 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 		}
 	}
 
-	// Send webhook notifications
 	if result.Healthy && check.OnSuccess != nil {
 		if err := s.notifier.NotifySuccess(check.OnSuccess, result); err != nil {
 			log.Printf("Failed to send success webhook for '%s': %v", check.Name, err)
