@@ -1,0 +1,34 @@
+{
+  "healthchecks": [
+    {
+      "name": "nginx-check",
+      "type": "http",
+      "schedule": "3s",
+      "retries": 1,
+      "timeout": 5000000000,
+      "http": {
+        "url": "http://nginx:80",
+        "method": "GET"
+      },
+      "on_success": {
+        "url": "http://integration-tests:9090/success",
+        "method": "POST"
+      }
+    },
+    {
+      "name": "failing-check",
+      "type": "http",
+      "schedule": "3s",
+      "retries": 1,
+      "timeout": 2000000000,
+      "http": {
+        "url": "http://no-such-host:9999",
+        "method": "GET"
+      },
+      "on_failure": {
+        "url": "http://integration-tests:9090/failure",
+        "method": "POST"
+      }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "healthchecks": [
+    {
+      "name": "google-health",
+      "type": "http",
+      "schedule": "10s",
+      "retries": 1,
+      "timeout": 5000000000,
+      "http": {
+        "url": "https://www.google.com",
+        "method": "GET",
+        "assertion": "status_code == 200 and 'Google' in body"
+      }
+    },
+    {
+      "name": "simple-starlark-check",
+      "type": "starlark",
+      "schedule": "15s",
+      "retries": 0,
+      "timeout": 5000000000,
+      "starlark": {
+        "script": "def check():\n    # Simple health check that always passes\n    return {\"healthy\": True, \"message\": \"Starlark check completed successfully\"}\n"
+      }
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+services:
+  nginx:
+    image: nginx:alpine
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 2s
+      timeout: 2s
+      retries: 5
+
+  watchdawg:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["-config", "/configs/config.integration.json"]
+    volumes:
+      - ./configs:/configs
+    depends_on:
+      nginx:
+        condition: service_healthy
+
+  integration-tests:
+    build:
+      context: integration-tests
+    ports:
+      - 9090:9090
+    depends_on:
+      watchdawg:
+        condition: service_started
+    profiles:
+      - test
+    volumes:
+      - ./integration-tests:/tests

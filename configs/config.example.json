@@ -1,0 +1,140 @@
+{
+  "healthchecks": [
+    {
+      "name": "api-health",
+      "type": "http",
+      "schedule": "30s",
+      "retries": 2,
+      "timeout": 5000000000,
+      "http": {
+        "url": "https://api.example.com/health",
+        "method": "GET",
+        "headers": {
+          "User-Agent": "WatchDawg/1.0"
+        },
+        "expected": {
+          "status_code": 200
+        }
+      },
+      "on_success": {
+        "url": "https://webhook.site/your-success-webhook",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "on_failure": {
+        "url": "https://webhook.site/your-failure-webhook",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "api-with-validation",
+      "type": "http",
+      "schedule": "1m",
+      "retries": 3,
+      "timeout": 10000000000,
+      "http": {
+        "url": "https://api.example.com/data",
+        "method": "GET",
+        "expected": {
+          "status_code": [200, 201, 202]
+        },
+        "assertion": "'success' in body"
+      },
+      "on_failure": {
+        "url": "https://webhook.site/your-failure-webhook",
+        "method": "POST"
+      }
+    },
+    {
+      "name": "api-json-validation",
+      "type": "http",
+      "schedule": "2m",
+      "retries": 2,
+      "timeout": 10000000000,
+      "http": {
+        "url": "https://api.example.com/status",
+        "method": "GET",
+        "expected": {
+          "status_code": 200,
+          "format": "json"
+        },
+        "assertion": "result['status'] == 'healthy' and result.get('uptime', 0) > 0"
+      },
+      "on_failure": {
+        "url": "https://webhook.site/your-failure-webhook",
+        "method": "POST"
+      }
+    },
+    {
+      "name": "api-product-validation",
+      "type": "http",
+      "schedule": "2m",
+      "retries": 2,
+      "timeout": 10000000000,
+      "http": {
+        "url": "https://api.example.com/product",
+        "method": "GET",
+        "expected": {
+          "status_code": 200,
+          "format": "json",
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        },
+        "assertion": "result['product_sku'] == 10012"
+      },
+      "on_failure": {
+        "url": "https://webhook.site/your-failure-webhook",
+        "method": "POST"
+      }
+    },
+    {
+      "name": "custom-starlark-check",
+      "type": "starlark",
+      "schedule": "2m",
+      "retries": 1,
+      "timeout": 15000000000,
+      "starlark": {
+        "script": "# This script can make HTTP calls and perform custom logic\nhealthy = True\nmessage = 'Custom check passed'\n",
+        "globals": {
+          "api_url": "https://api.example.com",
+          "threshold": 100
+        }
+      },
+      "on_success": {
+        "url": "https://webhook.site/your-success-webhook",
+        "method": "POST",
+        "body_template": "Health check '{{.CheckName}}' passed at {{.Timestamp}}"
+      },
+      "on_failure": {
+        "url": "https://webhook.site/your-failure-webhook",
+        "method": "POST",
+        "body_template": "ALERT: Health check '{{.CheckName}}' failed!\nReason: {{.Message}}\nTime: {{.Timestamp}}"
+      }
+    },
+    {
+      "name": "self-signed-cert-api",
+      "type": "http",
+      "schedule": "1m",
+      "retries": 2,
+      "timeout": 10000000000,
+      "http": {
+        "url": "https://dev-api.example.com/health",
+        "method": "GET",
+        "expected": {
+          "status_code": 200,
+          "verify_tls": false
+        }
+      },
+      "on_failure": {
+        "url": "https://webhook.site/your-failure-webhook",
+        "method": "POST"
+      }
+    }
+  ]
+}
