@@ -73,6 +73,7 @@ cd integration-tests && pytest tests/
 
 ### Code Quality
 - Name functions and data structures self-descriptively
+- Use comprehensive variable names except for absolutely obvious cases (e.g. i == index)
 - Reserve comments for non-obvious logic; explain WHY not HOW
 - Document only major stable components with external dependants
 - Never break existing tests when making changes
@@ -86,3 +87,4 @@ cd integration-tests && pytest tests/
 ### Workflow
 - If a task involved a repeatable multi-step workflow (3+ steps, likely to recur), suggest turning it into a Skill
 - If you introduced new patterns or conventions not yet in CLAUDE.md, suggest updating it
+- If your change will break existing API, dependents etc, highlight this with CAPS in plan and/or output

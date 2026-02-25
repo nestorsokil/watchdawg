@@ -70,7 +70,51 @@ func validateConfig(config *models.Config) error {
 		if check.Timeout == 0 {
 			check.Timeout = 30 * 1000000000 // 30 seconds in nanoseconds
 		}
+
+		for j, h := range check.OnSuccess {
+			if err := validateHookConfig(fmt.Sprintf("healthcheck[%d] (%s) on_success[%d]", i, check.Name, j), h); err != nil {
+				return err
+			}
+		}
+		for j, h := range check.OnFailure {
+			if err := validateHookConfig(fmt.Sprintf("healthcheck[%d] (%s) on_failure[%d]", i, check.Name, j), h); err != nil {
+				return err
+			}
+		}
 	}
 
+	return nil
+}
+
+func validateHookConfig(fieldName string, hook models.HookConfig) error {
+	set := 0
+	if hook.HTTP != nil {
+		set++
+	}
+	if hook.Kafka != nil {
+		set++
+	}
+	if set == 0 {
+		return fmt.Errorf("%s: must specify exactly one of 'http' or 'kafka'", fieldName)
+	}
+	if set > 1 {
+		return fmt.Errorf("%s: only one hook type may be specified per entry", fieldName)
+	}
+	if hook.HTTP != nil {
+		if hook.HTTP.URL == "" {
+			return fmt.Errorf("%s.http: url is required", fieldName)
+		}
+		if hook.HTTP.Method == "" {
+			hook.HTTP.Method = "POST"
+		}
+	}
+	if hook.Kafka != nil {
+		if hook.Kafka.Topic == "" {
+			return fmt.Errorf("%s.kafka: topic is required", fieldName)
+		}
+		if len(hook.Kafka.Brokers) == 0 {
+			return fmt.Errorf("%s.kafka: at least one broker is required", fieldName)
+		}
+	}
 	return nil
 }

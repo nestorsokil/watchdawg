@@ -16,7 +16,7 @@ type Scheduler struct {
 	cron            *cron.Cron
 	httpChecker     *HTTPChecker
 	starlarkChecker *StarlarkChecker
-	notifier        *WebhookNotifier
+	notifier        *HookNotifier
 }
 
 func NewScheduler() *Scheduler {
@@ -24,7 +24,7 @@ func NewScheduler() *Scheduler {
 		cron:            cron.New(cron.WithSeconds()),
 		httpChecker:     NewHTTPChecker(),
 		starlarkChecker: NewStarlarkChecker(),
-		notifier:        NewWebhookNotifier(),
+		notifier:        NewHookNotifier(),
 	}
 }
 
@@ -111,19 +111,19 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 		}
 	}
 
-	if result.Healthy && check.OnSuccess != nil {
+	if result.Healthy && len(check.OnSuccess) > 0 {
 		if err := s.notifier.NotifySuccess(check.OnSuccess, result); err != nil {
-			log.Printf("Failed to send success webhook for '%s': %v", check.Name, err)
+			log.Printf("Failed to send success hook(s) for '%s': %v", check.Name, err)
 		} else {
-			log.Printf("Sent success webhook for '%s'", check.Name)
+			log.Printf("Sent success hook(s) for '%s'", check.Name)
 		}
 	}
 
-	if !result.Healthy && check.OnFailure != nil {
+	if !result.Healthy && len(check.OnFailure) > 0 {
 		if err := s.notifier.NotifyFailure(check.OnFailure, result); err != nil {
-			log.Printf("Failed to send failure webhook for '%s': %v", check.Name, err)
+			log.Printf("Failed to send failure hook(s) for '%s': %v", check.Name, err)
 		} else {
-			log.Printf("Sent failure webhook for '%s'", check.Name)
+			log.Printf("Sent failure hook(s) for '%s'", check.Name)
 		}
 	}
 }

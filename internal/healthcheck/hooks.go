@@ -3,6 +3,7 @@ package healthcheck
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"text/template"
@@ -11,33 +12,48 @@ import (
 	"watchdawg/internal/models"
 )
 
-type WebhookNotifier struct {
+type HookNotifier struct {
 	client *http.Client
 }
 
-func NewWebhookNotifier() *WebhookNotifier {
-	return &WebhookNotifier{
+func NewHookNotifier() *HookNotifier {
+	return &HookNotifier{
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 	}
 }
 
-func (w *WebhookNotifier) NotifySuccess(config *WebhookConfig, result *models.CheckResult) error {
-	if config == nil {
-		return nil
-	}
-	return w.sendWebhook(config, result)
+func (n *HookNotifier) NotifySuccess(hooks []models.HookConfig, result *models.CheckResult) error {
+	return n.executeHooks(hooks, result)
 }
 
-func (w *WebhookNotifier) NotifyFailure(config *WebhookConfig, result *models.CheckResult) error {
-	if config == nil {
-		return nil
-	}
-	return w.sendWebhook(config, result)
+func (n *HookNotifier) NotifyFailure(hooks []models.HookConfig, result *models.CheckResult) error {
+	return n.executeHooks(hooks, result)
 }
 
-func (w *WebhookNotifier) sendWebhook(config *WebhookConfig, result *models.CheckResult) error {
+func (n *HookNotifier) executeHooks(hooks []models.HookConfig, result *models.CheckResult) error {
+	var errs []error
+	for _, hook := range hooks {
+		if err := n.executeHook(hook, result); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (n *HookNotifier) executeHook(hook models.HookConfig, result *models.CheckResult) error {
+	switch {
+	case hook.HTTP != nil:
+		return n.sendWebhook(hook.HTTP, result)
+	case hook.Kafka != nil:
+		panic("kafka hook: unimplemented")
+	default:
+		return fmt.Errorf("hook has no configured type")
+	}
+}
+
+func (n *HookNotifier) sendWebhook(config *models.WebhookConfig, result *models.CheckResult) error {
 	var bodyContent string
 	if config.BodyTemplate != "" {
 		tmpl, err := template.New("webhook").Parse(config.BodyTemplate)
@@ -82,7 +98,7 @@ func (w *WebhookNotifier) sendWebhook(config *WebhookConfig, result *models.Chec
 		}
 	}
 
-	resp, err := w.client.Do(req)
+	resp, err := n.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("webhook request failed: %w", err)
 	}
@@ -94,6 +110,3 @@ func (w *WebhookNotifier) sendWebhook(config *WebhookConfig, result *models.Chec
 
 	return nil
 }
-
-// WebhookConfig is re-exported from models for convenience
-type WebhookConfig = models.WebhookConfig

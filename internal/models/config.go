@@ -20,8 +20,8 @@ type HealthCheck struct {
 
 	HTTP      *HTTPCheckConfig     `json:"http,omitempty"`
 	Starlark  *StarlarkCheckConfig `json:"starlark,omitempty"`
-	OnSuccess *WebhookConfig       `json:"on_success,omitempty"`
-	OnFailure *WebhookConfig       `json:"on_failure,omitempty"`
+	OnSuccess []HookConfig `json:"on_success,omitempty"`
+	OnFailure []HookConfig `json:"on_failure,omitempty"`
 }
 
 type CheckType string
@@ -132,4 +132,20 @@ type WebhookConfig struct {
 
 	// Template for the webhook body (will receive check result data)
 	BodyTemplate string `json:"body_template,omitempty"`
+}
+
+// KafkaHookConfig defines a Kafka message to publish as a hook notification.
+type KafkaHookConfig struct {
+	Brokers         []string `json:"brokers"`
+	Topic           string   `json:"topic"`
+	MessageTemplate string   `json:"message_template,omitempty"`
+}
+
+// HookConfig is a tagged union: exactly one type key must be present.
+//
+//	{"http": {"url": "...", "method": "POST"}}
+//	{"kafka": {"brokers": ["localhost:9092"], "topic": "alerts"}}
+type HookConfig struct {
+	HTTP  *WebhookConfig   `json:"http,omitempty"`
+	Kafka *KafkaHookConfig `json:"kafka,omitempty"`
 }

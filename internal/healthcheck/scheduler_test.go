@@ -130,7 +130,7 @@ func TestExecuteHealthCheck_SuccessWebhookFired(t *testing.T) {
 		Type:      models.CheckTypeHTTP,
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
-		OnSuccess: &models.WebhookConfig{URL: webhookSrv.URL},
+		OnSuccess: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}},
 	})
 
 	if n := atomic.LoadInt32(&webhookCalled); n != 1 {
@@ -157,7 +157,7 @@ func TestExecuteHealthCheck_FailureWebhookFired(t *testing.T) {
 		Type:      models.CheckTypeHTTP,
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
-		OnFailure: &models.WebhookConfig{URL: webhookSrv.URL},
+		OnFailure: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}},
 	})
 
 	if n := atomic.LoadInt32(&webhookCalled); n != 1 {
@@ -184,7 +184,7 @@ func TestExecuteHealthCheck_SuccessWebhookNotFiredOnFailure(t *testing.T) {
 		Type:      models.CheckTypeHTTP,
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
-		OnSuccess: &models.WebhookConfig{URL: webhookSrv.URL}, // only success hook
+		OnSuccess: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}}, // only success hook
 	})
 
 	if n := atomic.LoadInt32(&webhookCalled); n != 0 {
@@ -211,7 +211,7 @@ func TestExecuteHealthCheck_FailureWebhookNotFiredOnSuccess(t *testing.T) {
 		Type:      models.CheckTypeHTTP,
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
-		OnFailure: &models.WebhookConfig{URL: webhookSrv.URL}, // only failure hook
+		OnFailure: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}}, // only failure hook
 	})
 
 	if n := atomic.LoadInt32(&webhookCalled); n != 0 {

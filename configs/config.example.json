@@ -16,20 +16,28 @@
           "status_code": 200
         }
       },
-      "on_success": {
-        "url": "https://webhook.site/your-success-webhook",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json"
+      "on_success": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-success-webhook",
+            "method": "POST",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          }
         }
-      },
-      "on_failure": {
-        "url": "https://webhook.site/your-failure-webhook",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json"
+      ],
+      "on_failure": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-failure-webhook",
+            "method": "POST",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          }
         }
-      }
+      ]
     },
     {
       "name": "api-with-validation",
@@ -45,10 +53,14 @@
         },
         "assertion": "'success' in body"
       },
-      "on_failure": {
-        "url": "https://webhook.site/your-failure-webhook",
-        "method": "POST"
-      }
+      "on_failure": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-failure-webhook",
+            "method": "POST"
+          }
+        }
+      ]
     },
     {
       "name": "api-json-validation",
@@ -65,10 +77,14 @@
         },
         "assertion": "result['status'] == 'healthy' and result.get('uptime', 0) > 0"
       },
-      "on_failure": {
-        "url": "https://webhook.site/your-failure-webhook",
-        "method": "POST"
-      }
+      "on_failure": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-failure-webhook",
+            "method": "POST"
+          }
+        }
+      ]
     },
     {
       "name": "api-product-validation",
@@ -88,10 +104,14 @@
         },
         "assertion": "result['product_sku'] == 10012"
       },
-      "on_failure": {
-        "url": "https://webhook.site/your-failure-webhook",
-        "method": "POST"
-      }
+      "on_failure": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-failure-webhook",
+            "method": "POST"
+          }
+        }
+      ]
     },
     {
       "name": "custom-starlark-check",
@@ -106,16 +126,24 @@
           "threshold": 100
         }
       },
-      "on_success": {
-        "url": "https://webhook.site/your-success-webhook",
-        "method": "POST",
-        "body_template": "Health check '{{.CheckName}}' passed at {{.Timestamp}}"
-      },
-      "on_failure": {
-        "url": "https://webhook.site/your-failure-webhook",
-        "method": "POST",
-        "body_template": "ALERT: Health check '{{.CheckName}}' failed!\nReason: {{.Message}}\nTime: {{.Timestamp}}"
-      }
+      "on_success": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-success-webhook",
+            "method": "POST",
+            "body_template": "Health check '{{.CheckName}}' passed at {{.Timestamp}}"
+          }
+        }
+      ],
+      "on_failure": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-failure-webhook",
+            "method": "POST",
+            "body_template": "ALERT: Health check '{{.CheckName}}' failed!\nReason: {{.Message}}\nTime: {{.Timestamp}}"
+          }
+        }
+      ]
     },
     {
       "name": "self-signed-cert-api",
@@ -131,10 +159,43 @@
           "verify_tls": false
         }
       },
-      "on_failure": {
-        "url": "https://webhook.site/your-failure-webhook",
-        "method": "POST"
-      }
+      "on_failure": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-failure-webhook",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
+      "name": "multi-hook-example",
+      "type": "http",
+      "schedule": "5m",
+      "retries": 1,
+      "timeout": 10000000000,
+      "http": {
+        "url": "https://api.example.com/health",
+        "method": "GET",
+        "expected": {
+          "status_code": 200
+        }
+      },
+      "on_failure": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-failure-webhook",
+            "method": "POST"
+          }
+        },
+        {
+          "kafka": {
+            "brokers": ["localhost:9092"],
+            "topic": "health-alerts",
+            "message_template": "Check '{{.CheckName}}' failed: {{.Message}}"
+          }
+        }
+      ]
     }
   ]
 }
