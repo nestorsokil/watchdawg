@@ -131,11 +131,17 @@ func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 		}
 	}
 
-	// Check status code
-	if len(check.HTTP.Expected.StatusCode.Codes) > 0 && !check.HTTP.Expected.StatusCode.Matches(resp.StatusCode) {
+	// Check status code: if expected codes are configured, must match one; otherwise require 2xx
+	if len(check.HTTP.Expected.StatusCode.Codes) > 0 {
+		if !check.HTTP.Expected.StatusCode.Matches(resp.StatusCode) {
+			result.Healthy = false
+			result.Message = fmt.Sprintf("unexpected status code: got %d, expected %s",
+				resp.StatusCode, check.HTTP.Expected.StatusCode.String())
+			return result
+		}
+	} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		result.Healthy = false
-		result.Message = fmt.Sprintf("unexpected status code: got %d, expected %s",
-			resp.StatusCode, check.HTTP.Expected.StatusCode.String())
+		result.Message = fmt.Sprintf("unexpected status code: got %d, expected 2xx", resp.StatusCode)
 		return result
 	}
 
