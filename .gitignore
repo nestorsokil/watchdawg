@@ -18,7 +18,7 @@ vendor/
 go.work
 
 # Binary output
-watchdawg
+./watchdawg
 bin/
 
 # IDE specific files
