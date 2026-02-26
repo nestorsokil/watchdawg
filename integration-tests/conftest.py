@@ -2,9 +2,11 @@ import threading
 import logging
 import pytest
 
-from stubs import webhook_receiver, ReceivedWebhooks, HealthcheckTarget, KafkaHooks
+from stubs import webhook_receiver
 from stubs import healthcheck_target as _healthcheck_target_mod
 from stubs import kafka_hooks as _kafka_hooks_mod
+
+logging.getLogger("kafka").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
@@ -29,19 +31,19 @@ def _start_kafka_consumers():
 @pytest.fixture
 def received_webhooks():
     webhook_receiver.clear()
-    yield ReceivedWebhooks(webhook_receiver)
+    yield webhook_receiver.ReceivedWebhooks()
     webhook_receiver.clear()
 
 
 @pytest.fixture
 def healthcheck_target():
     _healthcheck_target_mod.reset()
-    yield HealthcheckTarget(_healthcheck_target_mod)
+    yield _healthcheck_target_mod.HealthcheckTarget()
     _healthcheck_target_mod.reset()
 
 
 @pytest.fixture
 def kafka_hooks():
     _kafka_hooks_mod.clear()
-    yield KafkaHooks(_kafka_hooks_mod)
+    yield _kafka_hooks_mod.KafkaHooks()
     _kafka_hooks_mod.clear()

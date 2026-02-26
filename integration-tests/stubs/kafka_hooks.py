@@ -8,7 +8,9 @@ State is module-level so the session fixture owns the lifetime.
 """
 import json
 import threading
-
+import logging
+from utils import wait_for
+from assertpy import assert_that
 from kafka import KafkaConsumer, KafkaProducer
 
 BROKERS = ["kafka:9092"]
@@ -19,6 +21,51 @@ FAILURE_TOPIC = "watchdawg-failure"
 _lock = threading.Lock()
 _success_messages = []
 _failure_messages = []
+
+class KafkaHooks:
+    """Test-facing wrapper for the kafka_hooks module state."""
+    def send(self, value="ping"):
+        producer = KafkaProducer(bootstrap_servers=BROKERS)
+        producer.send(TARGET_TOPIC, value.encode("utf-8"))
+        producer.flush()
+        producer.close()
+
+    def success(self):
+        with _lock:
+            return list(_success_messages)
+
+    def failure(self):
+        with _lock:
+            return list(_failure_messages)
+
+    def expect_success(self, check_name, timeout=30):
+        wait_for(
+            lambda: len(self.success()) >= 1,
+            timeout=timeout,
+            description=f"kafka on_success hook for '{check_name}'",
+        )
+        messages = self.success()
+        logging.info(f"Received kafka success hook for check '{check_name}'")
+        assert_that(len(messages)).is_greater_than_or_equal_to(1)
+        latest = messages[-1]
+        assert_that(latest["healthy"]).is_true()
+        assert_that(latest["check_name"]).is_equal_to(check_name)
+        return messages
+
+    def expect_failure(self, check_name, timeout=30):
+        wait_for(
+            lambda: len(self.failure()) >= 1,
+            timeout=timeout,
+            description=f"kafka on_failure hook for '{check_name}'",
+        )
+        messages = self.failure()
+        logging.info(f"Received kafka failure hook for check '{check_name}'")
+        assert_that(len(messages)).is_greater_than_or_equal_to(1)
+        latest = messages[-1]
+        assert_that(latest["healthy"]).is_false()
+        assert_that(latest["check_name"]).is_equal_to(check_name)
+        return messages
+
 
 
 def _consume_loop(topic, store):
@@ -45,25 +92,6 @@ def start():
     for topic, store in [(SUCCESS_TOPIC, _success_messages), (FAILURE_TOPIC, _failure_messages)]:
         t = threading.Thread(target=_consume_loop, args=(topic, store), daemon=True)
         t.start()
-
-
-def send_target_message(value="ping"):
-    """Produce a message to the target topic that WatchDawg is monitoring."""
-    producer = KafkaProducer(bootstrap_servers=BROKERS)
-    producer.send(TARGET_TOPIC, value.encode("utf-8"))
-    producer.flush()
-    producer.close()
-
-
-def get_success():
-    with _lock:
-        return list(_success_messages)
-
-
-def get_failure():
-    with _lock:
-        return list(_failure_messages)
-
 
 def clear():
     with _lock:
