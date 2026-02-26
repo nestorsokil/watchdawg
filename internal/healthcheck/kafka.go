@@ -2,7 +2,6 @@ package healthcheck
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"go.starlark.net/starlark"
 
 	"watchdawg/internal/models"
+	"watchdawg/internal/starlarkeval"
 )
 
 // kafkaReader is the minimal interface for consuming Kafka messages.
@@ -223,15 +223,7 @@ func (k *KafkaChecker) Stop() {
 }
 
 // validateWithStarlark runs a Starlark assertion against a received Kafka message.
-// It reuses the same helpers as HTTPChecker (isSimpleExpression, goToStarlark, etc.)
-// since they live in the same package.
 func (k *KafkaChecker) validateWithStarlark(script string, format models.ResponseFormat, msg *receivedMessage) (valid bool, message string, err error) {
-	if isSimpleExpression(script) {
-		script = fmt.Sprintf("valid = %s", script)
-	}
-
-	thread := &starlark.Thread{Name: "kafka-validation"}
-
 	headersDict := &starlark.Dict{}
 	for key, value := range msg.Headers {
 		headersDict.SetKey(starlark.String(key), starlark.String(value))
@@ -243,43 +235,31 @@ func (k *KafkaChecker) validateWithStarlark(script string, format models.Respons
 		"headers": headersDict,
 	}
 
-	if format == models.ResponseFormatJSON {
-		var parsed interface{}
-		if jsonErr := json.Unmarshal(msg.Value, &parsed); jsonErr != nil {
-			return false, "", fmt.Errorf("failed to parse message value as JSON: %w", jsonErr)
+	if format != models.ResponseFormatNone {
+		parsedResult, parseErr := starlarkeval.ParseResponseBody(string(msg.Value), format)
+		if parseErr != nil {
+			return false, "", fmt.Errorf("failed to parse message value as %s: %w", format, parseErr)
 		}
-		globals["result"] = goToStarlark(parsed)
+		globals["result"] = parsedResult
 	}
 
-	moduleGlobals, execErr := starlark.ExecFile(thread, "kafka-validation.star", script, globals)
-	if execErr != nil {
-		return false, "", fmt.Errorf("script execution failed: %w", execErr)
-	}
+	return starlarkeval.RunAssertionScript("kafka-validation", "kafka-validation.star", script, globals)
+}
 
-	// If the script set a "result" dict with validation fields, use that.
-	if resultVal, ok := moduleGlobals["result"]; ok {
-		if dict, isDict := resultVal.(*starlark.Dict); isDict {
-			if hasValidationFields(dict) {
-				return parseValidationResult(resultVal)
-			}
-		}
-	}
+// KafkaPublisher publishes messages to Kafka topics. It is co-located with the
+// consumer so all Kafka I/O lives in one file.
+type KafkaPublisher struct{}
 
-	if validVal, ok := moduleGlobals["valid"]; ok {
-		if boolVal, ok := validVal.(starlark.Bool); ok {
-			valid = bool(boolVal)
-		}
-	} else if healthyVal, ok := moduleGlobals["healthy"]; ok {
-		if boolVal, ok := healthyVal.(starlark.Bool); ok {
-			valid = bool(boolVal)
-		}
-	}
+func NewKafkaPublisher() *KafkaPublisher {
+	return &KafkaPublisher{}
+}
 
-	if msgVal, ok := moduleGlobals["message"]; ok {
-		if strVal, ok := msgVal.(starlark.String); ok {
-			message = string(strVal)
-		}
+// Publish writes a single message to the given topic via the provided brokers.
+func (p *KafkaPublisher) Publish(ctx context.Context, brokers []string, topic string, message []byte) error {
+	writer := &kafka.Writer{
+		Addr:  kafka.TCP(brokers...),
+		Topic: topic,
 	}
-
-	return valid, message, nil
+	defer writer.Close()
+	return writer.WriteMessages(ctx, kafka.Message{Value: message})
 }

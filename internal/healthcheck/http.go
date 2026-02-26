@@ -4,18 +4,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"go.starlark.net/starlark"
 
 	"watchdawg/internal/models"
+	"watchdawg/internal/starlarkeval"
 )
 
 type HTTPChecker struct {
@@ -195,16 +193,6 @@ func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 }
 
 func (h *HTTPChecker) validateWithStarlark(script string, expectedFormat models.ResponseFormat, httpResult *models.HTTPResult) (valid bool, message string, err error) {
-	isSimpleExpr := isSimpleExpression(script)
-
-	if isSimpleExpr {
-		script = fmt.Sprintf("valid = %s", script)
-	}
-
-	thread := &starlark.Thread{
-		Name: "http-validation",
-	}
-
 	globals := starlark.StringDict{
 		"status_code": starlark.MakeInt(httpResult.StatusCode),
 		"body":        starlark.String(httpResult.Body),
@@ -218,146 +206,12 @@ func (h *HTTPChecker) validateWithStarlark(script string, expectedFormat models.
 	globals["headers"] = headersDict
 
 	if expectedFormat != models.ResponseFormatNone {
-		parsedResult, parseErr := parseResponseBody(httpResult.Body, expectedFormat)
+		parsedResult, parseErr := starlarkeval.ParseResponseBody(httpResult.Body, expectedFormat)
 		if parseErr != nil {
 			return false, "", fmt.Errorf("failed to parse response as %s: %w", expectedFormat, parseErr)
 		}
 		globals["result"] = parsedResult
 	}
 
-	// ExecFile returns the full module environment (predeclared + script-defined bindings).
-	// The input globals dict is not mutated, so we must use the returned dict.
-	moduleGlobals, execErr := starlark.ExecFile(thread, "validation.star", script, globals)
-	if execErr != nil {
-		return false, "", fmt.Errorf("script execution failed: %w", execErr)
-	}
-
-	// The script-set "result" dict takes precedence only when it contains validation fields,
-	// to avoid collision with the pre-set "result" variable used for parsed response bodies.
-	if resultVal, ok := moduleGlobals["result"]; ok {
-		if dict, isDict := resultVal.(*starlark.Dict); isDict {
-			if hasValidationFields(dict) {
-				return parseValidationResult(resultVal)
-			}
-		}
-	}
-
-	if validVal, ok := moduleGlobals["valid"]; ok {
-		if boolVal, ok := validVal.(starlark.Bool); ok {
-			valid = bool(boolVal)
-		}
-	} else if healthyVal, ok := moduleGlobals["healthy"]; ok {
-		if boolVal, ok := healthyVal.(starlark.Bool); ok {
-			valid = bool(boolVal)
-		}
-	}
-
-	if msgVal, ok := moduleGlobals["message"]; ok {
-		if strVal, ok := msgVal.(starlark.String); ok {
-			message = string(strVal)
-		}
-	}
-
-	return valid, message, nil
-}
-
-func isSimpleExpression(script string) bool {
-	script = strings.TrimSpace(script)
-
-	if strings.Contains(script, "\n") {
-		return false
-	}
-
-	if strings.Contains(script, "valid =") ||
-		strings.Contains(script, "healthy =") ||
-		strings.Contains(script, "message =") ||
-		strings.Contains(script, "def ") ||
-		strings.HasPrefix(script, "import ") {
-		return false
-	}
-
-	return true
-}
-
-func parseResponseBody(body string, format models.ResponseFormat) (starlark.Value, error) {
-	switch format {
-	case models.ResponseFormatJSON:
-		var data interface{}
-		if err := json.Unmarshal([]byte(body), &data); err != nil {
-			return nil, err
-		}
-		return goToStarlark(data), nil
-
-	case models.ResponseFormatXML:
-		var data interface{}
-		if err := xml.Unmarshal([]byte(body), &data); err != nil {
-			return nil, err
-		}
-		return goToStarlark(data), nil
-
-	default:
-		return starlark.None, nil
-	}
-}
-
-func goToStarlark(v interface{}) starlark.Value {
-	switch val := v.(type) {
-	case nil:
-		return starlark.None
-	case bool:
-		return starlark.Bool(val)
-	case int:
-		return starlark.MakeInt(val)
-	case int64:
-		return starlark.MakeInt64(val)
-	case float64:
-		return starlark.Float(val)
-	case string:
-		return starlark.String(val)
-	case []interface{}:
-		list := &starlark.List{}
-		for _, item := range val {
-			list.Append(goToStarlark(item))
-		}
-		return list
-	case map[string]interface{}:
-		dict := starlark.NewDict(len(val))
-		for key, value := range val {
-			dict.SetKey(starlark.String(key), goToStarlark(value))
-		}
-		return dict
-	default:
-		return starlark.String(fmt.Sprintf("%v", val))
-	}
-}
-
-func hasValidationFields(dict *starlark.Dict) bool {
-	_, hasValid, _ := dict.Get(starlark.String("valid"))
-	_, hasHealthy, _ := dict.Get(starlark.String("healthy"))
-	return hasValid || hasHealthy
-}
-
-func parseValidationResult(val starlark.Value) (valid bool, message string, err error) {
-	dict, ok := val.(*starlark.Dict)
-	if !ok {
-		return false, "", fmt.Errorf("result must be a dict")
-	}
-
-	if validVal, found, _ := dict.Get(starlark.String("valid")); found {
-		if boolVal, ok := validVal.(starlark.Bool); ok {
-			valid = bool(boolVal)
-		}
-	} else if healthyVal, found, _ := dict.Get(starlark.String("healthy")); found {
-		if boolVal, ok := healthyVal.(starlark.Bool); ok {
-			valid = bool(boolVal)
-		}
-	}
-
-	if msgVal, found, _ := dict.Get(starlark.String("message")); found {
-		if strVal, ok := msgVal.(starlark.String); ok {
-			message = string(strVal)
-		}
-	}
-
-	return valid, message, nil
+	return starlarkeval.RunAssertionScript("http-validation", "validation.star", script, globals)
 }

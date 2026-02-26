@@ -11,6 +11,7 @@ import (
 	"go.starlark.net/starlark"
 
 	"watchdawg/internal/models"
+	"watchdawg/internal/starlarkeval"
 )
 
 // makeHTTPCheck creates a minimal HealthCheck for HTTP tests.
@@ -461,43 +462,43 @@ func TestHTTPChecker_ResultMetadata(t *testing.T) {
 // ── isSimpleExpression ────────────────────────────────────────────────────────
 
 func TestIsSimpleExpression_BooleanExpression(t *testing.T) {
-	if !isSimpleExpression("status_code == 200") {
+	if !starlarkeval.IsSimpleExpression("status_code == 200") {
 		t.Fatal("expected true for simple boolean expression")
 	}
 }
 
 func TestIsSimpleExpression_CompoundExpression(t *testing.T) {
-	if !isSimpleExpression(`status_code == 200 and "ok" in body`) {
+	if !starlarkeval.IsSimpleExpression(`status_code == 200 and "ok" in body`) {
 		t.Fatal("expected true for compound expression without newlines or assignments")
 	}
 }
 
 func TestIsSimpleExpression_WithValidAssignment(t *testing.T) {
-	if isSimpleExpression("valid = status_code == 200") {
+	if starlarkeval.IsSimpleExpression("valid = status_code == 200") {
 		t.Fatal("expected false for expression containing 'valid ='")
 	}
 }
 
 func TestIsSimpleExpression_WithHealthyAssignment(t *testing.T) {
-	if isSimpleExpression("healthy = True") {
+	if starlarkeval.IsSimpleExpression("healthy = True") {
 		t.Fatal("expected false for expression containing 'healthy ='")
 	}
 }
 
 func TestIsSimpleExpression_WithMessageAssignment(t *testing.T) {
-	if isSimpleExpression("message = 'done'") {
+	if starlarkeval.IsSimpleExpression("message = 'done'") {
 		t.Fatal("expected false for expression containing 'message ='")
 	}
 }
 
 func TestIsSimpleExpression_WithDef(t *testing.T) {
-	if isSimpleExpression("def check(): return True") {
+	if starlarkeval.IsSimpleExpression("def check(): return True") {
 		t.Fatal("expected false for line containing 'def '")
 	}
 }
 
 func TestIsSimpleExpression_WithNewline(t *testing.T) {
-	if isSimpleExpression("valid = True\nmessage = 'ok'") {
+	if starlarkeval.IsSimpleExpression("valid = True\nmessage = 'ok'") {
 		t.Fatal("expected false for multi-line script")
 	}
 }
@@ -505,13 +506,13 @@ func TestIsSimpleExpression_WithNewline(t *testing.T) {
 // ── goToStarlark ──────────────────────────────────────────────────────────────
 
 func TestGoToStarlark_Nil(t *testing.T) {
-	if got := goToStarlark(nil); got != starlark.None {
+	if got := starlarkeval.GoToStarlark(nil); got != starlark.None {
 		t.Fatalf("expected starlark.None for nil, got %v", got)
 	}
 }
 
 func TestGoToStarlark_Bool(t *testing.T) {
-	got := goToStarlark(true)
+	got := starlarkeval.GoToStarlark(true)
 	b, ok := got.(starlark.Bool)
 	if !ok || !bool(b) {
 		t.Fatalf("expected starlark.Bool(true), got %v (%T)", got, got)
@@ -519,7 +520,7 @@ func TestGoToStarlark_Bool(t *testing.T) {
 }
 
 func TestGoToStarlark_Int(t *testing.T) {
-	got := goToStarlark(42)
+	got := starlarkeval.GoToStarlark(42)
 	i, ok := got.(starlark.Int)
 	if !ok {
 		t.Fatalf("expected starlark.Int for int, got %T", got)
@@ -531,7 +532,7 @@ func TestGoToStarlark_Int(t *testing.T) {
 }
 
 func TestGoToStarlark_Int64(t *testing.T) {
-	got := goToStarlark(int64(100))
+	got := starlarkeval.GoToStarlark(int64(100))
 	i, ok := got.(starlark.Int)
 	if !ok {
 		t.Fatalf("expected starlark.Int for int64, got %T", got)
@@ -543,7 +544,7 @@ func TestGoToStarlark_Int64(t *testing.T) {
 }
 
 func TestGoToStarlark_Float64(t *testing.T) {
-	got := goToStarlark(3.14)
+	got := starlarkeval.GoToStarlark(3.14)
 	f, ok := got.(starlark.Float)
 	if !ok || float64(f) != 3.14 {
 		t.Fatalf("expected starlark.Float(3.14), got %v (%T)", got, got)
@@ -551,7 +552,7 @@ func TestGoToStarlark_Float64(t *testing.T) {
 }
 
 func TestGoToStarlark_String(t *testing.T) {
-	got := goToStarlark("hello")
+	got := starlarkeval.GoToStarlark("hello")
 	s, ok := got.(starlark.String)
 	if !ok || string(s) != "hello" {
 		t.Fatalf("expected starlark.String('hello'), got %v (%T)", got, got)
@@ -559,7 +560,7 @@ func TestGoToStarlark_String(t *testing.T) {
 }
 
 func TestGoToStarlark_Slice(t *testing.T) {
-	got := goToStarlark([]interface{}{"a", "b"})
+	got := starlarkeval.GoToStarlark([]interface{}{"a", "b"})
 	list, ok := got.(*starlark.List)
 	if !ok {
 		t.Fatalf("expected *starlark.List, got %T", got)
@@ -570,7 +571,7 @@ func TestGoToStarlark_Slice(t *testing.T) {
 }
 
 func TestGoToStarlark_Map(t *testing.T) {
-	got := goToStarlark(map[string]interface{}{"k": "v"})
+	got := starlarkeval.GoToStarlark(map[string]interface{}{"k": "v"})
 	dict, ok := got.(*starlark.Dict)
 	if !ok {
 		t.Fatalf("expected *starlark.Dict, got %T", got)
@@ -585,7 +586,7 @@ func TestGoToStarlark_Map(t *testing.T) {
 }
 
 func TestGoToStarlark_UnknownType(t *testing.T) {
-	got := goToStarlark(struct{ Foo int }{Foo: 1})
+	got := starlarkeval.GoToStarlark(struct{ Foo int }{Foo: 1})
 	if _, ok := got.(starlark.String); !ok {
 		t.Fatalf("expected starlark.String (via fmt.Sprintf) for unknown type, got %T", got)
 	}
@@ -594,7 +595,7 @@ func TestGoToStarlark_UnknownType(t *testing.T) {
 // ── parseResponseBody ─────────────────────────────────────────────────────────
 
 func TestParseResponseBody_ValidJSON(t *testing.T) {
-	val, err := parseResponseBody(`{"key":"value"}`, models.ResponseFormatJSON)
+	val, err := starlarkeval.ParseResponseBody(`{"key":"value"}`, models.ResponseFormatJSON)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -612,7 +613,7 @@ func TestParseResponseBody_ValidJSON(t *testing.T) {
 }
 
 func TestParseResponseBody_InvalidJSON(t *testing.T) {
-	_, err := parseResponseBody(`not json`, models.ResponseFormatJSON)
+	_, err := starlarkeval.ParseResponseBody(`not json`, models.ResponseFormatJSON)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
@@ -620,21 +621,21 @@ func TestParseResponseBody_InvalidJSON(t *testing.T) {
 
 func TestParseResponseBody_ValidXMLSucceeds(t *testing.T) {
 	// xml.Unmarshal into interface{} succeeds for well-formed XML without error.
-	_, err := parseResponseBody(`<root><item>value</item></root>`, models.ResponseFormatXML)
+	_, err := starlarkeval.ParseResponseBody(`<root><item>value</item></root>`, models.ResponseFormatXML)
 	if err != nil {
 		t.Fatalf("expected no error for valid XML, got: %v", err)
 	}
 }
 
 func TestParseResponseBody_InvalidXMLFails(t *testing.T) {
-	_, err := parseResponseBody(`<unclosed`, models.ResponseFormatXML)
+	_, err := starlarkeval.ParseResponseBody(`<unclosed`, models.ResponseFormatXML)
 	if err == nil {
 		t.Fatal("expected error for invalid XML")
 	}
 }
 
 func TestParseResponseBody_NoneFormat(t *testing.T) {
-	val, err := parseResponseBody(`anything`, models.ResponseFormatNone)
+	val, err := starlarkeval.ParseResponseBody(`anything`, models.ResponseFormatNone)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -648,7 +649,7 @@ func TestParseResponseBody_NoneFormat(t *testing.T) {
 func TestHasValidationFields_WithValidKey(t *testing.T) {
 	d := &starlark.Dict{}
 	d.SetKey(starlark.String("valid"), starlark.True)
-	if !hasValidationFields(d) {
+	if !starlarkeval.HasValidationFields(d) {
 		t.Fatal("expected true for dict with 'valid' key")
 	}
 }
@@ -656,7 +657,7 @@ func TestHasValidationFields_WithValidKey(t *testing.T) {
 func TestHasValidationFields_WithHealthyKey(t *testing.T) {
 	d := &starlark.Dict{}
 	d.SetKey(starlark.String("healthy"), starlark.True)
-	if !hasValidationFields(d) {
+	if !starlarkeval.HasValidationFields(d) {
 		t.Fatal("expected true for dict with 'healthy' key")
 	}
 }
@@ -664,7 +665,7 @@ func TestHasValidationFields_WithHealthyKey(t *testing.T) {
 func TestHasValidationFields_Neither(t *testing.T) {
 	d := &starlark.Dict{}
 	d.SetKey(starlark.String("status"), starlark.String("ok"))
-	if hasValidationFields(d) {
+	if starlarkeval.HasValidationFields(d) {
 		t.Fatal("expected false for dict without 'valid' or 'healthy' keys")
 	}
 }
@@ -674,7 +675,7 @@ func TestHasValidationFields_Neither(t *testing.T) {
 func TestParseValidationResult_WithValidField(t *testing.T) {
 	d := &starlark.Dict{}
 	d.SetKey(starlark.String("valid"), starlark.True)
-	valid, msg, err := parseValidationResult(d)
+	valid, msg, err := starlarkeval.ParseValidationResult(d)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -686,7 +687,7 @@ func TestParseValidationResult_WithValidField(t *testing.T) {
 func TestParseValidationResult_WithHealthyField(t *testing.T) {
 	d := &starlark.Dict{}
 	d.SetKey(starlark.String("healthy"), starlark.False)
-	valid, _, err := parseValidationResult(d)
+	valid, _, err := starlarkeval.ParseValidationResult(d)
 	if err != nil || valid {
 		t.Fatalf("expected valid=false, err=nil; got valid=%v, err=%v", valid, err)
 	}
@@ -696,14 +697,14 @@ func TestParseValidationResult_WithMessage(t *testing.T) {
 	d := &starlark.Dict{}
 	d.SetKey(starlark.String("valid"), starlark.True)
 	d.SetKey(starlark.String("message"), starlark.String("all ok"))
-	_, msg, err := parseValidationResult(d)
+	_, msg, err := starlarkeval.ParseValidationResult(d)
 	if err != nil || msg != "all ok" {
 		t.Fatalf("expected msg='all ok', err=nil; got msg=%q, err=%v", msg, err)
 	}
 }
 
 func TestParseValidationResult_NotDict(t *testing.T) {
-	_, _, err := parseValidationResult(starlark.String("not a dict"))
+	_, _, err := starlarkeval.ParseValidationResult(starlark.String("not a dict"))
 	if err == nil {
 		t.Fatal("expected error for non-dict input")
 	}

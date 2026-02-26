@@ -10,20 +10,18 @@ import (
 	"text/template"
 	"time"
 
-	kafka "github.com/segmentio/kafka-go"
-
 	"watchdawg/internal/models"
 )
 
 type HookNotifier struct {
-	client *http.Client
+	client          *http.Client
+	kafkaPublisher  *KafkaPublisher
 }
 
 func NewHookNotifier() *HookNotifier {
 	return &HookNotifier{
-		client: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		client:         &http.Client{Timeout: 10 * time.Second},
+		kafkaPublisher: NewKafkaPublisher(),
 	}
 }
 
@@ -137,18 +135,10 @@ func (n *HookNotifier) sendKafkaMessage(config *models.KafkaHookConfig, result *
 		messageBody = string(jsonBytes)
 	}
 
-	writer := &kafka.Writer{
-		Addr:  kafka.TCP(config.Brokers...),
-		Topic: config.Topic,
-	}
-	defer writer.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if err := writer.WriteMessages(ctx, kafka.Message{
-		Value: []byte(messageBody),
-	}); err != nil {
+	if err := n.kafkaPublisher.Publish(ctx, config.Brokers, config.Topic, []byte(messageBody)); err != nil {
 		return fmt.Errorf("failed to write kafka hook message to topic '%s': %w", config.Topic, err)
 	}
 
