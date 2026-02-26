@@ -196,6 +196,56 @@
           }
         }
       ]
+    },
+    {
+      "name": "order-events-liveness",
+      "type": "kafka",
+      "schedule": "30s",
+      "timeout": 5000000000,
+      "kafka": {
+        "brokers": ["localhost:9092"],
+        "topic": "orders",
+        "group_id": "watchdawg-order-events"
+      },
+      "on_failure": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-failure-webhook",
+            "method": "POST",
+            "body_template": "ALERT: No order events for check '{{.CheckName}}': {{.Message}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "payment-events-with-assertion",
+      "type": "kafka",
+      "schedule": "1m",
+      "timeout": 5000000000,
+      "kafka": {
+        "brokers": ["localhost:9092"],
+        "topic": "payments",
+        "format": "json",
+        "assertion": "result.get('status') in ('completed', 'pending')"
+      },
+      "on_success": [
+        {
+          "kafka": {
+            "brokers": ["localhost:9092"],
+            "topic": "watchdawg-results",
+            "message_template": "Check '{{.CheckName}}' passed: {{.Message}}"
+          }
+        }
+      ],
+      "on_failure": [
+        {
+          "kafka": {
+            "brokers": ["localhost:9092"],
+            "topic": "health-alerts",
+            "message_template": "Check '{{.CheckName}}' failed: {{.Message}}"
+          }
+        }
+      ]
     }
   ]
 }

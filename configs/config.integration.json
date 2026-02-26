@@ -26,6 +26,32 @@
           }
         }
       ]
+    },
+    {
+      "name": "kafka_liveness",
+      "type": "kafka",
+      "schedule": "5s",
+      "timeout": 10000000000,
+      "kafka": {
+        "brokers": ["kafka:9092"],
+        "topic": "watchdawg-target"
+      },
+      "on_success": [
+        {
+          "kafka": {
+            "brokers": ["kafka:9092"],
+            "topic": "watchdawg-success"
+          }
+        }
+      ],
+      "on_failure": [
+        {
+          "kafka": {
+            "brokers": ["kafka:9092"],
+            "topic": "watchdawg-failure"
+          }
+        }
+      ]
     }
   ]
 }

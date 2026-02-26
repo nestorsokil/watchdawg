@@ -1,2 +1,3 @@
 from stubs.webhook_helpers import ReceivedWebhooks
 from stubs.healthcheck_helpers import HealthcheckTarget
+from stubs.kafka_hooks_helpers import KafkaHooks
