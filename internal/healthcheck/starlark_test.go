@@ -2,11 +2,17 @@ package healthcheck
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
 
 	"watchdawg/internal/models"
 )
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 // helper to build a minimal HealthCheck for Starlark tests
 func makeCheck(script string) *models.HealthCheck {
@@ -33,7 +39,7 @@ func makeCheckWithGlobals(script string, globals map[string]interface{}) *models
 // ── check() function returning a boolean ──────────────────────────────────────
 
 func TestExecute_CheckFunctionReturnsBoolTrue(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 def check():
     return True
@@ -44,7 +50,7 @@ def check():
 }
 
 func TestExecute_CheckFunctionReturnsBoolFalse(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 def check():
     return False
@@ -57,7 +63,7 @@ def check():
 // ── check() function returning a dict ─────────────────────────────────────────
 
 func TestExecute_CheckFunctionReturnsDictHealthy(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 def check():
     return {"healthy": True, "message": "all good"}
@@ -71,7 +77,7 @@ def check():
 }
 
 func TestExecute_CheckFunctionReturnsDictUnhealthy(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 def check():
     return {"healthy": False, "message": "something broke"}
@@ -85,7 +91,7 @@ def check():
 }
 
 func TestExecute_CheckFunctionReturnsDictWithoutMessage(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 def check():
     return {"healthy": True}
@@ -98,7 +104,7 @@ def check():
 // ── check() function error cases ──────────────────────────────────────────────
 
 func TestExecute_CheckFunctionMissingHealthyField(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 def check():
     return {"status": "ok"}
@@ -112,7 +118,7 @@ def check():
 }
 
 func TestExecute_CheckFunctionHealthyFieldNotBool(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 def check():
     return {"healthy": "yes"}
@@ -126,7 +132,7 @@ def check():
 }
 
 func TestExecute_CheckFunctionReturnsWrongType(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 def check():
     return 42
@@ -140,7 +146,7 @@ def check():
 }
 
 func TestExecute_CheckIsNotCallable(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 check = "not a function"
 `))
@@ -153,7 +159,7 @@ check = "not a function"
 }
 
 func TestExecute_CheckFunctionRaisesError(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 def check():
     fail("intentional failure")
@@ -169,7 +175,7 @@ def check():
 // ── script errors ─────────────────────────────────────────────────────────────
 
 func TestExecute_ScriptSyntaxError(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 def check(
     # intentionally broken syntax
@@ -183,7 +189,7 @@ def check(
 }
 
 func TestExecute_ScriptRuntimeError(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	// Accessing an undefined variable triggers a runtime error
 	result := checker.Execute(context.Background(), makeCheck(`
 x = undefined_variable
@@ -199,7 +205,7 @@ x = undefined_variable
 // ── fallback: global variable mode ───────────────────────────────────────────
 
 func TestExecute_GlobalResultDict(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 result = {"healthy": True, "message": "via global result"}
 `))
@@ -212,7 +218,7 @@ result = {"healthy": True, "message": "via global result"}
 }
 
 func TestExecute_GlobalResultDictUnhealthy(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 result = {"healthy": False, "message": "unhealthy via global"}
 `))
@@ -225,7 +231,7 @@ result = {"healthy": False, "message": "unhealthy via global"}
 }
 
 func TestExecute_GlobalHealthyAndMessageVars(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`
 healthy = False
 message = "explicit globals"
@@ -239,7 +245,7 @@ message = "explicit globals"
 }
 
 func TestExecute_NoExplicitResult_DefaultsToSuccess(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	// An empty script with no check() function and no result/healthy/message
 	// globals should default to healthy=true.
 	result := checker.Execute(context.Background(), makeCheck(`x = 1 + 1`))
@@ -251,7 +257,7 @@ func TestExecute_NoExplicitResult_DefaultsToSuccess(t *testing.T) {
 // ── global variable injection ─────────────────────────────────────────────────
 
 func TestExecute_GlobalsInjectedIntoScript(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	check := makeCheckWithGlobals(`
 def check():
     if threshold > 90:
@@ -269,7 +275,7 @@ def check():
 }
 
 func TestExecute_StringGlobal(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	check := makeCheckWithGlobals(`
 def check():
     return {"healthy": True, "message": greeting}
@@ -285,7 +291,7 @@ def check():
 }
 
 func TestExecute_BoolGlobal(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	check := makeCheckWithGlobals(`
 def check():
     return enabled
@@ -298,7 +304,7 @@ def check():
 }
 
 func TestExecute_MapGlobal(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	check := makeCheckWithGlobals(`
 def check():
     return cfg["ok"]
@@ -311,7 +317,7 @@ def check():
 }
 
 func TestExecute_ListGlobal(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	check := makeCheckWithGlobals(`
 def check():
     return len(items) > 0
@@ -326,7 +332,7 @@ def check():
 // ── toStarlarkValue ──────────────────────────────────────────────────────────
 
 func TestToStarlarkValue_UnknownType(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	// An unrecognised type should produce starlark.None, which scripts treat as falsy.
 	check := makeCheckWithGlobals(`
 def check():
@@ -344,7 +350,7 @@ def check():
 // ── result metadata ───────────────────────────────────────────────────────────
 
 func TestExecute_SetsCheckName(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`healthy = True`))
 	if result.CheckName != "test-check" {
 		t.Fatalf("expected CheckName 'test-check', got %q", result.CheckName)
@@ -352,7 +358,7 @@ func TestExecute_SetsCheckName(t *testing.T) {
 }
 
 func TestExecute_SetsDurationMs(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`healthy = True`))
 	if result.Duration < 0 {
 		t.Fatalf("expected non-negative duration, got %d", result.Duration)
@@ -360,7 +366,7 @@ func TestExecute_SetsDurationMs(t *testing.T) {
 }
 
 func TestExecute_SetsAttemptNumber(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	result := checker.Execute(context.Background(), makeCheck(`healthy = True`))
 	if result.Attempt != 1 {
 		t.Fatalf("expected Attempt=1, got %d", result.Attempt)
@@ -371,7 +377,7 @@ func TestExecute_SetsAttemptNumber(t *testing.T) {
 
 // NOTE: this test incurs a ~1 s sleep (the inter-attempt delay in Execute).
 func TestExecute_ReturnsLastAttemptOnAllFailures(t *testing.T) {
-	checker := NewStarlarkChecker()
+	checker := NewStarlarkChecker(testLogger())
 	check := &models.HealthCheck{
 		Name:    "retry-check",
 		Retries: 1, // 2 total attempts

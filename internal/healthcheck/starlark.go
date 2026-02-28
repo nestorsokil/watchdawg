@@ -3,6 +3,7 @@ package healthcheck
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"go.starlark.net/starlark"
@@ -12,10 +13,12 @@ import (
 	"watchdawg/internal/starlarkeval"
 )
 
-type StarlarkChecker struct{}
+type StarlarkChecker struct {
+	logger *slog.Logger
+}
 
-func NewStarlarkChecker() *StarlarkChecker {
-	return &StarlarkChecker{}
+func NewStarlarkChecker(logger *slog.Logger) *StarlarkChecker {
+	return &StarlarkChecker{logger: logger}
 }
 
 func (s *StarlarkChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
@@ -52,6 +55,7 @@ func (s *StarlarkChecker) executeOnce(ctx context.Context, check *models.HealthC
 	globals := s.buildGlobals(check)
 
 	healthy, message, err := starlarkeval.RunCheckScript(
+		ctx,
 		fmt.Sprintf("healthcheck-%s", check.Name),
 		check.Name+".star",
 		check.Starlark.Script,

@@ -3,7 +3,7 @@ package healthcheck
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -49,13 +49,15 @@ type kafkaConsumerState struct {
 type KafkaChecker struct {
 	consumers map[string]*kafkaConsumerState
 	mu        sync.RWMutex
+	logger    *slog.Logger
 	// newReader is injectable so tests can replace the real kafka.Reader.
 	newReader func(brokers []string, topic, groupID string) kafkaReader
 }
 
-func NewKafkaChecker() *KafkaChecker {
+func NewKafkaChecker(logger *slog.Logger) *KafkaChecker {
 	return &KafkaChecker{
 		consumers: make(map[string]*kafkaConsumerState),
+		logger:    logger,
 		newReader: func(brokers []string, topic, groupID string) kafkaReader {
 			return kafka.NewReader(kafka.ReaderConfig{
 				Brokers:     brokers,
@@ -70,32 +72,53 @@ func NewKafkaChecker() *KafkaChecker {
 }
 
 // StartConsumer registers and launches a background consumer for the given
-// kafka check. The consumer runs until Stop is called.
-func (k *KafkaChecker) StartConsumer(check models.HealthCheck) error {
+// kafka check. The consumer runs until the provided ctx is cancelled or Stop is called.
+func (k *KafkaChecker) StartConsumer(ctx context.Context, check models.HealthCheck) error {
 	interval, err := time.ParseDuration(check.Schedule)
 	if err != nil {
 		// Config validation should have caught this; guard defensively.
 		return fmt.Errorf("invalid schedule duration for kafka check '%s': %w", check.Name, err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	consumerCtx, cancel := context.WithCancel(ctx)
 	state := &kafkaConsumerState{
 		expectedInterval: interval,
 		cancel:           cancel,
 	}
 
-	reader := k.newReader(check.Kafka.Brokers, check.Kafka.Topic, check.Kafka.GroupID)
-
 	k.mu.Lock()
 	k.consumers[check.Name] = state
 	k.mu.Unlock()
 
-	log.Printf("Starting Kafka consumer for check '%s' on topic '%s' via brokers %v",
-		check.Name, check.Kafka.Topic, check.Kafka.Brokers)
+	reader := k.newReader(check.Kafka.Brokers, check.Kafka.Topic, check.Kafka.GroupID)
 
-	go k.consumeMessages(ctx, check.Name, reader, state)
+	k.logger.Info("Starting Kafka consumer",
+		"check", check.Name,
+		"topic", check.Kafka.Topic,
+		"brokers", check.Kafka.Brokers,
+	)
+
+	go k.runConsumer(consumerCtx, check, state, reader)
 
 	return nil
+}
+
+// runConsumer wraps consumeMessages with panic recovery. On panic it creates a
+// new reader and restarts itself, unless the context has already been cancelled.
+func (k *KafkaChecker) runConsumer(ctx context.Context, check models.HealthCheck, state *kafkaConsumerState, reader kafkaReader) {
+	defer func() {
+		if r := recover(); r != nil {
+			k.logger.Error("Kafka consumer panicked, will restart",
+				"check", check.Name,
+				"panic", r,
+			)
+			if ctx.Err() == nil {
+				newReader := k.newReader(check.Kafka.Brokers, check.Kafka.Topic, check.Kafka.GroupID)
+				go k.runConsumer(ctx, check, state, newReader)
+			}
+		}
+	}()
+	k.consumeMessages(ctx, check.Name, reader, state)
 }
 
 func (k *KafkaChecker) consumeMessages(ctx context.Context, checkName string, reader kafkaReader, state *kafkaConsumerState) {
@@ -105,10 +128,10 @@ func (k *KafkaChecker) consumeMessages(ctx context.Context, checkName string, re
 		msg, err := reader.FetchMessage(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
-				log.Printf("Kafka consumer for check '%s' stopped", checkName)
+				k.logger.Info("Kafka consumer stopped", "check", checkName)
 				return
 			}
-			log.Printf("Kafka consumer error for check '%s': %v — will retry", checkName, err)
+			k.logger.Warn("Kafka consumer error, will retry", "check", checkName, "error", err)
 			continue
 		}
 
@@ -184,7 +207,7 @@ func (k *KafkaChecker) Execute(ctx context.Context, check *models.HealthCheck) *
 	}
 
 	if check.Kafka.Assertion != "" && lastMsg != nil {
-		valid, assertionMsg, err := k.validateWithStarlark(check.Kafka.Assertion, check.Kafka.Format, lastMsg)
+		valid, assertionMsg, err := k.validateWithStarlark(ctx, check.Kafka.Assertion, check.Kafka.Format, lastMsg)
 		if err != nil {
 			result.Healthy = false
 			result.Error = fmt.Sprintf("assertion error: %v", err)
@@ -217,13 +240,13 @@ func (k *KafkaChecker) Stop() {
 	k.mu.RLock()
 	defer k.mu.RUnlock()
 	for name, state := range k.consumers {
-		log.Printf("Stopping Kafka consumer for check '%s'", name)
+		k.logger.Info("Stopping Kafka consumer", "check", name)
 		state.cancel()
 	}
 }
 
 // validateWithStarlark runs a Starlark assertion against a received Kafka message.
-func (k *KafkaChecker) validateWithStarlark(script string, format models.ResponseFormat, msg *receivedMessage) (valid bool, message string, err error) {
+func (k *KafkaChecker) validateWithStarlark(ctx context.Context, script string, format models.ResponseFormat, msg *receivedMessage) (valid bool, message string, err error) {
 	headersDict := &starlark.Dict{}
 	for key, value := range msg.Headers {
 		headersDict.SetKey(starlark.String(key), starlark.String(value))
@@ -243,7 +266,7 @@ func (k *KafkaChecker) validateWithStarlark(script string, format models.Respons
 		globals["result"] = parsedResult
 	}
 
-	return starlarkeval.RunAssertionScript("kafka-validation", "kafka-validation.star", script, globals)
+	return starlarkeval.RunAssertionScript(ctx, "kafka-validation", "kafka-validation.star", script, globals)
 }
 
 // KafkaPublisher publishes messages to Kafka topics. It is co-located with the

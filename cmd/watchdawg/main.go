@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,36 +12,51 @@ import (
 )
 
 func main() {
-	log.Println("WatchDawg - Dynamic Health Checking Service")
-	log.Println("============================================")
+	logger := buildLogger()
+	slog.SetDefault(logger)
+
+	logger.Info("WatchDawg - Dynamic Health Checking Service")
 
 	configPath := flag.String("config", "config.json", "Path to configuration file")
 	flag.Parse()
 
-	log.Printf("Loading configuration from: %s", *configPath)
+	logger.Info("Loading configuration", "path", *configPath)
 	cfg, err := config.LoadFromFile(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logger.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
 	}
 
-	log.Printf("Loaded %d health check(s)", len(cfg.HealthChecks))
+	logger.Info("Configuration loaded", "checks", len(cfg.HealthChecks))
 
-	scheduler := healthcheck.NewScheduler()
+	scheduler := healthcheck.NewScheduler(logger)
 
 	for _, check := range cfg.HealthChecks {
 		if err := scheduler.AddHealthCheck(check); err != nil {
-			log.Fatalf("Failed to schedule check '%s': %v", check.Name, err)
+			logger.Error("Failed to schedule check", "check", check.Name, "error", err)
+			os.Exit(1)
 		}
 	}
 
 	scheduler.Start()
-	log.Println("Health checks are running. Press Ctrl+C to stop.")
+	logger.Info("Health checks are running. Press Ctrl+C to stop.")
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
 
-	log.Println("\nReceived shutdown signal...")
+	logger.Info("Received shutdown signal")
 	scheduler.Stop()
-	log.Println("WatchDawg stopped. Goodbye!")
+	logger.Info("WatchDawg stopped")
+}
+
+func buildLogger() *slog.Logger {
+	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	var handler slog.Handler
+	if os.Getenv("LOG_FORMAT") == "json" {
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	} else {
+		handler = slog.NewTextHandler(os.Stderr, opts)
+	}
+	return slog.New(handler)
 }

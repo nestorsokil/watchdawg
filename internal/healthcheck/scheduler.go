@@ -3,7 +3,7 @@ package healthcheck
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,21 +12,51 @@ import (
 	"watchdawg/internal/models"
 )
 
+// cronSlogAdapter bridges robfig/cron's Logger interface to slog.
+// It is used to route cron internals (including recovered panics) through slog.
+type cronSlogAdapter struct {
+	logger *slog.Logger
+}
+
+func (a cronSlogAdapter) Info(msg string, keysAndValues ...interface{}) {
+	a.logger.Info(msg, keysAndValues...)
+}
+
+func (a cronSlogAdapter) Error(err error, msg string, keysAndValues ...interface{}) {
+	args := make([]interface{}, 0, len(keysAndValues)+2)
+	args = append(args, "error", err)
+	args = append(args, keysAndValues...)
+	a.logger.Error(msg, args...)
+}
+
 type Scheduler struct {
 	cron            *cron.Cron
 	httpChecker     *HTTPChecker
 	starlarkChecker *StarlarkChecker
 	kafkaChecker    *KafkaChecker
 	notifier        *HookNotifier
+	logger          *slog.Logger
+	// rootCtx is cancelled in Stop to signal background workers (e.g. Kafka consumers).
+	rootCtx    context.Context
+	rootCancel context.CancelFunc
 }
 
-func NewScheduler() *Scheduler {
+func NewScheduler(logger *slog.Logger) *Scheduler {
+	adapter := cronSlogAdapter{logger: logger}
+	rootCtx, rootCancel := context.WithCancel(context.Background())
 	return &Scheduler{
-		cron:            cron.New(cron.WithSeconds()),
-		httpChecker:     NewHTTPChecker(),
-		starlarkChecker: NewStarlarkChecker(),
-		kafkaChecker:    NewKafkaChecker(),
-		notifier:        NewHookNotifier(),
+		cron: cron.New(
+			cron.WithSeconds(),
+			cron.WithChain(cron.Recover(adapter)),
+			cron.WithLogger(adapter),
+		),
+		httpChecker:     NewHTTPChecker(logger),
+		starlarkChecker: NewStarlarkChecker(logger),
+		kafkaChecker:    NewKafkaChecker(logger),
+		notifier:        NewHookNotifier(logger),
+		logger:          logger,
+		rootCtx:         rootCtx,
+		rootCancel:      rootCancel,
 	}
 }
 
@@ -34,7 +64,7 @@ func (s *Scheduler) AddHealthCheck(check models.HealthCheck) error {
 	// Kafka checks require a background consumer started before the first
 	// scheduled tick so the consumer is already listening when Execute runs.
 	if check.Type == models.CheckTypeKafka {
-		if err := s.kafkaChecker.StartConsumer(check); err != nil {
+		if err := s.kafkaChecker.StartConsumer(s.rootCtx, check); err != nil {
 			return fmt.Errorf("failed to start kafka consumer for check '%s': %w", check.Name, err)
 		}
 	}
@@ -49,21 +79,22 @@ func (s *Scheduler) AddHealthCheck(check models.HealthCheck) error {
 		return fmt.Errorf("failed to schedule check '%s': %w", check.Name, err)
 	}
 
-	log.Printf("Scheduled health check '%s' with schedule: %s", check.Name, check.Schedule)
+	s.logger.Info("Scheduled health check", "check", check.Name, "schedule", check.Schedule)
 	return nil
 }
 
 func (s *Scheduler) Start() {
-	log.Println("Starting health check scheduler...")
+	s.logger.Info("Starting health check scheduler")
 	s.cron.Start()
 }
 
 func (s *Scheduler) Stop() {
-	log.Println("Stopping health check scheduler...")
+	s.logger.Info("Stopping health check scheduler")
 	ctx := s.cron.Stop()
 	<-ctx.Done()
+	s.rootCancel()
 	s.kafkaChecker.Stop()
-	log.Println("Scheduler stopped")
+	s.logger.Info("Scheduler stopped")
 }
 
 func (s *Scheduler) parseSchedule(schedule string) string {
@@ -96,7 +127,7 @@ func (s *Scheduler) parseSchedule(schedule string) string {
 }
 
 func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
-	log.Printf("Executing health check: %s", check.Name)
+	s.logger.Info("Executing health check", "check", check.Name)
 
 	ctx, cancel := context.WithTimeout(context.Background(), check.Timeout)
 	defer cancel()
@@ -111,32 +142,41 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 	case models.CheckTypeKafka:
 		result = s.kafkaChecker.Execute(ctx, &check)
 	default:
-		log.Printf("ERROR: Unknown check type '%s' for check '%s'", check.Type, check.Name)
+		s.logger.Error("Unknown check type", "type", check.Type, "check", check.Name)
 		return
 	}
 
 	if result.Healthy {
-		log.Printf("✓ Health check '%s' PASSED: %s (took %dms)", check.Name, result.Message, result.Duration)
+		s.logger.Info("Health check passed",
+			"check", check.Name,
+			"message", result.Message,
+			"duration_ms", result.Duration,
+		)
 	} else {
-		log.Printf("✗ Health check '%s' FAILED: %s (took %dms)", check.Name, result.Message, result.Duration)
-		if result.Error != "" {
-			log.Printf("  Error: %s", result.Error)
+		attrs := []interface{}{
+			"check", check.Name,
+			"message", result.Message,
+			"duration_ms", result.Duration,
 		}
+		if result.Error != "" {
+			attrs = append(attrs, "error", result.Error)
+		}
+		s.logger.Warn("Health check failed", attrs...)
 	}
 
 	if result.Healthy && len(check.OnSuccess) > 0 {
-		if err := s.notifier.NotifySuccess(check.OnSuccess, result); err != nil {
-			log.Printf("Failed to send success hook(s) for '%s': %v", check.Name, err)
+		if err := s.notifier.NotifySuccess(ctx, check.OnSuccess, result); err != nil {
+			s.logger.Error("Failed to send success hooks", "check", check.Name, "error", err)
 		} else {
-			log.Printf("Sent success hook(s) for '%s'", check.Name)
+			s.logger.Info("Sent success hooks", "check", check.Name)
 		}
 	}
 
 	if !result.Healthy && len(check.OnFailure) > 0 {
-		if err := s.notifier.NotifyFailure(check.OnFailure, result); err != nil {
-			log.Printf("Failed to send failure hook(s) for '%s': %v", check.Name, err)
+		if err := s.notifier.NotifyFailure(ctx, check.OnFailure, result); err != nil {
+			s.logger.Error("Failed to send failure hooks", "check", check.Name, "error", err)
 		} else {
-			log.Printf("Sent failure hook(s) for '%s'", check.Name)
+			s.logger.Info("Sent failure hooks", "check", check.Name)
 		}
 	}
 }

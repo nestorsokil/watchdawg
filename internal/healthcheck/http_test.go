@@ -34,7 +34,7 @@ func TestHTTPChecker_BasicSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), makeHTTPCheck(srv.URL, "GET"))
 	if !result.Healthy {
 		t.Fatalf("expected healthy=true, error: %s", result.Error)
@@ -42,7 +42,7 @@ func TestHTTPChecker_BasicSuccess(t *testing.T) {
 }
 
 func TestHTTPChecker_ConnectionRefused(t *testing.T) {
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), makeHTTPCheck("http://127.0.0.1:1", "GET"))
 	if result.Healthy {
 		t.Fatal("expected healthy=false for connection refused")
@@ -58,7 +58,7 @@ func TestHTTPChecker_5xxWithoutExpectedCode(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), makeHTTPCheck(srv.URL, "GET"))
 	if result.Healthy {
 		t.Fatal("expected healthy=false for 500 response without explicit expected code")
@@ -71,7 +71,7 @@ func TestHTTPChecker_3xxWithoutExpectedCode(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), makeHTTPCheck(srv.URL, "GET"))
 	if result.Healthy {
 		t.Fatal("expected healthy=false for 302 response without explicit expected code")
@@ -89,7 +89,7 @@ func TestHTTPChecker_ExpectedStatusCodeMatch(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Expected.StatusCode.Codes = []int{404}
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if !result.Healthy {
 		t.Fatalf("expected healthy=true for explicitly expected 404, error: %s", result.Error)
@@ -105,7 +105,7 @@ func TestHTTPChecker_ExpectedStatusCodeMismatch(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Expected.StatusCode.Codes = []int{201}
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if result.Healthy {
 		t.Fatal("expected healthy=false when status code doesn't match expected")
@@ -121,7 +121,7 @@ func TestHTTPChecker_MultipleAcceptableCodesMatch(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Expected.StatusCode.Codes = []int{200, 201, 204}
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if !result.Healthy {
 		t.Fatalf("expected healthy=true for 201 in [200, 201, 204], error: %s", result.Error)
@@ -137,7 +137,7 @@ func TestHTTPChecker_MultipleAcceptableCodesNoMatch(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Expected.StatusCode.Codes = []int{200, 201}
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if result.Healthy {
 		t.Fatal("expected healthy=false for 400 not in [200, 201]")
@@ -156,7 +156,7 @@ func TestHTTPChecker_ExpectedHeaderMatch(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Expected.Headers = map[string]string{"X-App-Version": "1.0"}
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if !result.Healthy {
 		t.Fatalf("expected healthy=true for matching header, error: %s", result.Error)
@@ -172,7 +172,7 @@ func TestHTTPChecker_ExpectedHeaderMissing(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Expected.Headers = map[string]string{"X-Required": "value"}
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if result.Healthy {
 		t.Fatal("expected healthy=false for missing required header")
@@ -189,7 +189,7 @@ func TestHTTPChecker_ExpectedHeaderWrongValue(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Expected.Headers = map[string]string{"X-App-Version": "1.0"}
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if result.Healthy {
 		t.Fatal("expected healthy=false for header value mismatch")
@@ -208,7 +208,7 @@ func TestHTTPChecker_TLSSkipVerify(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Expected.VerifyTLS = &falseBool
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if !result.Healthy {
 		t.Fatalf("expected healthy=true with TLS verify disabled, error: %s", result.Error)
@@ -222,7 +222,7 @@ func TestHTTPChecker_TLSDefaultVerifyFails(t *testing.T) {
 	defer srv.Close()
 
 	// Default client has TLS verification enabled; self-signed cert must fail.
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), makeHTTPCheck(srv.URL, "GET"))
 	if result.Healthy {
 		t.Fatal("expected healthy=false for self-signed cert with default TLS verification")
@@ -242,7 +242,7 @@ func TestHTTPChecker_CustomRequestHeaders(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Headers = map[string]string{"X-Custom": "myvalue"}
 
-	NewHTTPChecker().Execute(context.Background(), check)
+	NewHTTPChecker(testLogger()).Execute(context.Background(), check)
 	if gotHeader != "myvalue" {
 		t.Fatalf("expected header X-Custom=myvalue, got %q", gotHeader)
 	}
@@ -264,7 +264,7 @@ func TestHTTPChecker_RequestBody(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "POST")
 	check.HTTP.Body = `{"key":"value"}`
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if !result.Healthy {
 		t.Fatalf("expected healthy=true, error: %s", result.Error)
@@ -285,7 +285,7 @@ func TestHTTPChecker_StarlarkSimpleExpression(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Assertion = "status_code == 200"
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if !result.Healthy {
 		t.Fatalf("expected healthy=true for 'status_code == 200', error: %s", result.Error)
@@ -301,7 +301,7 @@ func TestHTTPChecker_StarlarkSimpleExpressionFails(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Assertion = "status_code == 201"
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if result.Healthy {
 		t.Fatal("expected healthy=false when 'status_code == 201' is evaluated against 200 response")
@@ -317,7 +317,7 @@ func TestHTTPChecker_StarlarkFullScript(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Assertion = "valid = status_code == 200\nmessage = \"status ok\""
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if !result.Healthy {
 		t.Fatalf("expected healthy=true for full script, error: %s", result.Error)
@@ -336,7 +336,7 @@ func TestHTTPChecker_StarlarkScriptError(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.HTTP.Assertion = `fail("intentional error")`
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if result.Healthy {
 		t.Fatal("expected healthy=false for Starlark script error")
@@ -357,7 +357,7 @@ func TestHTTPChecker_StarlarkJSONFormat(t *testing.T) {
 	check.HTTP.Expected.Format = models.ResponseFormatJSON
 	check.HTTP.Assertion = `valid = result["status"] == "ok"`
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if !result.Healthy {
 		t.Fatalf("expected healthy=true for JSON assertion, error: %s", result.Error)
@@ -374,7 +374,7 @@ func TestHTTPChecker_StarlarkJSONFormatParseError(t *testing.T) {
 	check.HTTP.Expected.Format = models.ResponseFormatJSON
 	check.HTTP.Assertion = `valid = True`
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if result.Healthy {
 		t.Fatal("expected healthy=false for JSON parse error")
@@ -401,7 +401,7 @@ func TestHTTPChecker_RetrySuccessOnSecondAttempt(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.Retries = 1
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if !result.Healthy {
 		t.Fatalf("expected healthy=true after retry, error: %s", result.Error)
@@ -421,7 +421,7 @@ func TestHTTPChecker_RetryAllFail(t *testing.T) {
 	check := makeHTTPCheck(srv.URL, "GET")
 	check.Retries = 1
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), check)
 	if result.Healthy {
 		t.Fatal("expected healthy=false after all retries fail")
@@ -439,7 +439,7 @@ func TestHTTPChecker_ResultMetadata(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	checker := NewHTTPChecker()
+	checker := NewHTTPChecker(testLogger())
 	result := checker.Execute(context.Background(), makeHTTPCheck(srv.URL, "GET"))
 
 	if result.CheckName != "test-http-check" {

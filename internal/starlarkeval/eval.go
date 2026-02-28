@@ -5,6 +5,7 @@
 package starlarkeval
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -25,7 +26,11 @@ import (
 //  1. `result` dict containing a "valid" or "healthy" key
 //  2. `valid` or `healthy` bool global
 //  3. `message` string global
-func RunAssertionScript(threadName, filename, script string, globals starlark.StringDict) (valid bool, message string, err error) {
+func RunAssertionScript(ctx context.Context, threadName, filename, script string, globals starlark.StringDict) (valid bool, message string, err error) {
+	if ctx.Err() != nil {
+		return false, "", ctx.Err()
+	}
+
 	if IsSimpleExpression(script) {
 		script = fmt.Sprintf("valid = %s", script)
 	}
@@ -74,7 +79,11 @@ func RunAssertionScript(threadName, filename, script string, globals starlark.St
 //  3. Otherwise fall back to reading global variables: `result`, `healthy`, `message`
 //
 // When no explicit result is set the check defaults to healthy.
-func RunCheckScript(threadName, filename, script string, globals starlark.StringDict) (healthy bool, message string, err error) {
+func RunCheckScript(ctx context.Context, threadName, filename, script string, globals starlark.StringDict) (healthy bool, message string, err error) {
+	if ctx.Err() != nil {
+		return false, "", ctx.Err()
+	}
+
 	thread := &starlark.Thread{Name: threadName}
 
 	moduleGlobals, execErr := starlark.ExecFile(thread, filename, script, globals)

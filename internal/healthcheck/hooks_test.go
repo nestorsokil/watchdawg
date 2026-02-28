@@ -1,6 +1,7 @@
 package healthcheck
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -43,12 +44,12 @@ func webhookHooks(cfg *models.WebhookConfig) []models.HookConfig {
 // ── List dispatch behaviour ───────────────────────────────────────────────────
 
 func TestHookNotifier_EmptyList_ReturnsNil(t *testing.T) {
-	n := NewHookNotifier()
+	n := NewHookNotifier(testLogger())
 	for _, hooks := range [][]models.HookConfig{nil, {}} {
-		if err := n.NotifySuccess(hooks, makeHookResult(true)); err != nil {
+		if err := n.NotifySuccess(context.Background(),hooks, makeHookResult(true)); err != nil {
 			t.Fatalf("NotifySuccess: expected nil for empty list, got: %v", err)
 		}
-		if err := n.NotifyFailure(hooks, makeHookResult(false)); err != nil {
+		if err := n.NotifyFailure(context.Background(),hooks, makeHookResult(false)); err != nil {
 			t.Fatalf("NotifyFailure: expected nil for empty list, got: %v", err)
 		}
 	}
@@ -72,8 +73,8 @@ func TestHookNotifier_MultipleHTTPHooks_AllExecuteInOrder(t *testing.T) {
 	srv2 := makeServer("second")
 	defer srv2.Close()
 
-	n := NewHookNotifier()
-	if err := n.NotifySuccess(
+	n := NewHookNotifier(testLogger())
+	if err := n.NotifySuccess(context.Background(),
 		[]models.HookConfig{httpHook(srv1.URL), httpHook(srv2.URL)},
 		makeHookResult(true),
 	); err != nil {
@@ -88,11 +89,11 @@ func TestHookNotifier_MultipleHTTPHooks_AllExecuteInOrder(t *testing.T) {
 }
 
 func TestHookNotifier_FailedHookDoesNotBlockSubsequent(t *testing.T) {
-	n := NewHookNotifier()
+	n := NewHookNotifier(testLogger())
 	// Both hooks point to an unreachable address. If the second were skipped
 	// after the first fails, errors.Join would wrap only one error; wrapping
 	// two proves both were attempted.
-	err := n.NotifyFailure(
+	err := n.NotifyFailure(context.Background(),
 		[]models.HookConfig{
 			httpHook("http://localhost:0"),
 			httpHook("http://localhost:0"),
@@ -109,8 +110,8 @@ func TestHookNotifier_FailedHookDoesNotBlockSubsequent(t *testing.T) {
 }
 
 func TestHookNotifier_EmptyHookConfig_ReturnsError(t *testing.T) {
-	n := NewHookNotifier()
-	err := n.executeHook(models.HookConfig{}, makeHookResult(true))
+	n := NewHookNotifier(testLogger())
+	err := n.executeHook(context.Background(),models.HookConfig{}, makeHookResult(true))
 	if err == nil {
 		t.Fatal("expected error for hook with no configured type, got nil")
 	}
@@ -132,7 +133,7 @@ func TestHookNotifier_SendsJSONBody(t *testing.T) {
 	defer srv.Close()
 
 	result := makeHookResult(true)
-	if err := NewHookNotifier().NotifySuccess(webhookHooks(&models.WebhookConfig{URL: srv.URL}), result); err != nil {
+	if err := NewHookNotifier(testLogger()).NotifySuccess(context.Background(), webhookHooks(&models.WebhookConfig{URL: srv.URL}), result); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -159,7 +160,7 @@ func TestHookNotifier_BodyTemplate(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewHookNotifier().NotifySuccess(webhookHooks(&models.WebhookConfig{
+	if err := NewHookNotifier(testLogger()).NotifySuccess(context.Background(), webhookHooks(&models.WebhookConfig{
 		URL:          srv.URL,
 		BodyTemplate: "Check: {{.CheckName}} - Healthy: {{.Healthy}}",
 	}), makeHookResult(true)); err != nil {
@@ -175,7 +176,7 @@ func TestHookNotifier_BodyTemplate(t *testing.T) {
 
 func TestHookNotifier_InvalidTemplate_ReturnsError(t *testing.T) {
 	// Template parsing fails before any network I/O; no real server needed.
-	err := NewHookNotifier().NotifySuccess(webhookHooks(&models.WebhookConfig{
+	err := NewHookNotifier(testLogger()).NotifySuccess(context.Background(), webhookHooks(&models.WebhookConfig{
 		URL:          "http://example.com",
 		BodyTemplate: "{{.Unclosed",
 	}), makeHookResult(true))
@@ -194,7 +195,7 @@ func TestHookNotifier_DefaultMethodIsPOST(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	NewHookNotifier().NotifySuccess(webhookHooks(&models.WebhookConfig{URL: srv.URL}), makeHookResult(true))
+	NewHookNotifier(testLogger()).NotifySuccess(context.Background(), webhookHooks(&models.WebhookConfig{URL: srv.URL}), makeHookResult(true))
 	if gotMethod != "POST" {
 		t.Fatalf("expected method POST, got %q", gotMethod)
 	}
@@ -208,7 +209,7 @@ func TestHookNotifier_CustomMethod(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	NewHookNotifier().NotifySuccess(webhookHooks(&models.WebhookConfig{URL: srv.URL, Method: "PUT"}), makeHookResult(true))
+	NewHookNotifier(testLogger()).NotifySuccess(context.Background(), webhookHooks(&models.WebhookConfig{URL: srv.URL, Method: "PUT"}), makeHookResult(true))
 	if gotMethod != "PUT" {
 		t.Fatalf("expected method PUT, got %q", gotMethod)
 	}
@@ -224,7 +225,7 @@ func TestHookNotifier_CustomHeaders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	NewHookNotifier().NotifySuccess(webhookHooks(&models.WebhookConfig{
+	NewHookNotifier(testLogger()).NotifySuccess(context.Background(), webhookHooks(&models.WebhookConfig{
 		URL:     srv.URL,
 		Headers: map[string]string{"Authorization": "Bearer token123"},
 	}), makeHookResult(true))
@@ -241,7 +242,7 @@ func TestHookNotifier_CustomContentTypeOverridesDefault(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	NewHookNotifier().NotifySuccess(webhookHooks(&models.WebhookConfig{
+	NewHookNotifier(testLogger()).NotifySuccess(context.Background(), webhookHooks(&models.WebhookConfig{
 		URL:     srv.URL,
 		Headers: map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	}), makeHookResult(true))
@@ -258,14 +259,14 @@ func TestHookNotifier_Non2xxResponse_ReturnsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := NewHookNotifier().NotifySuccess(webhookHooks(&models.WebhookConfig{URL: srv.URL}), makeHookResult(true))
+	err := NewHookNotifier(testLogger()).NotifySuccess(context.Background(), webhookHooks(&models.WebhookConfig{URL: srv.URL}), makeHookResult(true))
 	if err == nil {
 		t.Fatal("expected error for non-2xx webhook response")
 	}
 }
 
 func TestHookNotifier_UnreachableURL_ReturnsError(t *testing.T) {
-	err := NewHookNotifier().NotifySuccess(webhookHooks(&models.WebhookConfig{URL: "http://127.0.0.1:1"}), makeHookResult(true))
+	err := NewHookNotifier(testLogger()).NotifySuccess(context.Background(), webhookHooks(&models.WebhookConfig{URL: "http://127.0.0.1:1"}), makeHookResult(true))
 	if err == nil {
 		t.Fatal("expected error for unreachable webhook URL")
 	}

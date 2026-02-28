@@ -6,7 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -18,13 +18,15 @@ import (
 
 type HTTPChecker struct {
 	client *http.Client
+	logger *slog.Logger
 }
 
-func NewHTTPChecker() *HTTPChecker {
+func NewHTTPChecker(logger *slog.Logger) *HTTPChecker {
 	return &HTTPChecker{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		logger: logger,
 	}
 }
 
@@ -150,7 +152,7 @@ func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 	}
 
 	if check.HTTP.Assertion != "" {
-		valid, validationMsg, err := h.validateWithStarlark(check.HTTP.Assertion, check.HTTP.Expected.Format, result.HTTPResult)
+		valid, validationMsg, err := h.validateWithStarlark(ctx, check.HTTP.Assertion, check.HTTP.Expected.Format, result.HTTPResult)
 		if err != nil {
 			result.Healthy = false
 			result.Error = fmt.Sprintf("validation script error: %v", err)
@@ -159,11 +161,13 @@ func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 			if len(bodyPreview) > 500 {
 				bodyPreview = bodyPreview[:500] + "..."
 			}
-			log.Printf("  Response details for '%s':", check.Name)
-			log.Printf("    Status: %d", result.HTTPResult.StatusCode)
-			log.Printf("    Body size: %d bytes", result.HTTPResult.BodySize)
-			log.Printf("    Body preview: %s", bodyPreview)
-			log.Printf("    Headers: %v", result.HTTPResult.Headers)
+			h.logger.Debug("Assertion script error, response details",
+				"check", check.Name,
+				"status", result.HTTPResult.StatusCode,
+				"body_size", result.HTTPResult.BodySize,
+				"body_preview", bodyPreview,
+				"headers", result.HTTPResult.Headers,
+			)
 			return result
 		}
 
@@ -178,11 +182,13 @@ func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 			if len(bodyPreview) > 500 {
 				bodyPreview = bodyPreview[:500] + "..."
 			}
-			log.Printf("  Response details for '%s':", check.Name)
-			log.Printf("    Status: %d", result.HTTPResult.StatusCode)
-			log.Printf("    Body size: %d bytes", result.HTTPResult.BodySize)
-			log.Printf("    Body preview: %s", bodyPreview)
-			log.Printf("    Headers: %v", result.HTTPResult.Headers)
+			h.logger.Debug("Assertion validation failed, response details",
+				"check", check.Name,
+				"status", result.HTTPResult.StatusCode,
+				"body_size", result.HTTPResult.BodySize,
+				"body_preview", bodyPreview,
+				"headers", result.HTTPResult.Headers,
+			)
 		}
 		return result
 	}
@@ -192,7 +198,7 @@ func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 	return result
 }
 
-func (h *HTTPChecker) validateWithStarlark(script string, expectedFormat models.ResponseFormat, httpResult *models.HTTPResult) (valid bool, message string, err error) {
+func (h *HTTPChecker) validateWithStarlark(ctx context.Context, script string, expectedFormat models.ResponseFormat, httpResult *models.HTTPResult) (valid bool, message string, err error) {
 	globals := starlark.StringDict{
 		"status_code": starlark.MakeInt(httpResult.StatusCode),
 		"body":        starlark.String(httpResult.Body),
@@ -213,5 +219,5 @@ func (h *HTTPChecker) validateWithStarlark(script string, expectedFormat models.
 		globals["result"] = parsedResult
 	}
 
-	return starlarkeval.RunAssertionScript("http-validation", "validation.star", script, globals)
+	return starlarkeval.RunAssertionScript(ctx, "http-validation", "validation.star", script, globals)
 }

@@ -59,7 +59,5 @@ services:
         condition: service_started
       kafka:
         condition: service_healthy
-    profiles:
-      - test
     volumes:
       - ./integration-tests:/tests
