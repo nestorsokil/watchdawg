@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"text/template"
 	"time"
 
@@ -37,13 +38,24 @@ func (n *HookNotifier) NotifyFailure(ctx context.Context, hooks []models.HookCon
 }
 
 func (n *HookNotifier) executeHooks(ctx context.Context, hooks []models.HookConfig, result *models.CheckResult) error {
-	var errs []error
-	for _, hook := range hooks {
-		if err := n.executeHook(ctx, hook, result); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
+    var (
+        wg   sync.WaitGroup
+        mu   sync.Mutex
+        errs []error
+    )
+    for _, hook := range hooks {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            if err := n.executeHook(ctx, hook, result); err != nil {
+                mu.Lock()
+                errs = append(errs, err)
+                mu.Unlock()
+            }
+        }()
+    }
+    wg.Wait()
+    return errors.Join(errs...)
 }
 
 func (n *HookNotifier) executeHook(ctx context.Context, hook models.HookConfig, result *models.CheckResult) error {
