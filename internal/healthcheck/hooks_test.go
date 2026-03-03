@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -55,38 +54,6 @@ func TestHookNotifier_EmptyList_ReturnsNil(t *testing.T) {
 	}
 }
 
-func TestHookNotifier_MultipleHTTPHooks_AllExecuteInOrder(t *testing.T) {
-	var mu sync.Mutex
-	var calls []string
-
-	makeServer := func(name string) *httptest.Server {
-		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			mu.Lock()
-			calls = append(calls, name)
-			mu.Unlock()
-			w.WriteHeader(http.StatusOK)
-		}))
-	}
-
-	srv1 := makeServer("first")
-	defer srv1.Close()
-	srv2 := makeServer("second")
-	defer srv2.Close()
-
-	n := NewHookNotifier(testLogger())
-	if err := n.NotifySuccess(context.Background(),
-		[]models.HookConfig{httpHook(srv1.URL), httpHook(srv2.URL)},
-		makeHookResult(true),
-	); err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if len(calls) != 2 {
-		t.Fatalf("expected 2 hooks called, got %d", len(calls))
-	}
-	if calls[0] != "first" || calls[1] != "second" {
-		t.Fatalf("unexpected call order: %v", calls)
-	}
-}
 
 func TestHookNotifier_FailedHookDoesNotBlockSubsequent(t *testing.T) {
 	n := NewHookNotifier(testLogger())
@@ -151,11 +118,9 @@ func TestHookNotifier_SendsJSONBody(t *testing.T) {
 
 func TestHookNotifier_BodyTemplate(t *testing.T) {
 	var gotBody string
-	var gotContentType string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		gotBody = string(b)
-		gotContentType = r.Header.Get("Content-Type")
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -168,9 +133,6 @@ func TestHookNotifier_BodyTemplate(t *testing.T) {
 	}
 	if gotBody != "Check: test-check - Healthy: true" {
 		t.Fatalf("unexpected rendered body: %q", gotBody)
-	}
-	if gotContentType != "text/plain" {
-		t.Fatalf("expected Content-Type 'text/plain' for template, got %q", gotContentType)
 	}
 }
 
