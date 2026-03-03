@@ -57,22 +57,15 @@ func (n *HookNotifier) executeHook(ctx context.Context, hook models.HookConfig, 
 	}
 }
 
-func (n *HookNotifier) sendWebhook(ctx context.Context, config *models.WebhookConfig, result *models.CheckResult) error {
+func (n *HookNotifier) sendWebhook(ctx context.Context, config *models.WebhookConfig, result *models.CheckResult) (err error) {
 	var bodyContent string
 	if config.BodyTemplate != "" {
-		tmpl, err := template.New("webhook").Parse(config.BodyTemplate)
-		if err != nil {
-			return fmt.Errorf("failed to parse body template: %w", err)
+		if bodyContent, err = buildFromTemplate(config.BodyTemplate, "webhook", result); err != nil {
+			return err
 		}
-
-		var buf bytes.Buffer
-		if err := tmpl.Execute(&buf, result); err != nil {
-			return fmt.Errorf("failed to execute body template: %w", err)
-		}
-		bodyContent = buf.String()
 	} else {
-		jsonBytes, err := json.Marshal(result)
-		if err != nil {
+		var jsonBytes []byte
+		if jsonBytes, err = json.Marshal(result); err != nil {
 			return fmt.Errorf("failed to marshal result to JSON: %w", err)
 		}
 		bodyContent = string(jsonBytes)
@@ -95,11 +88,7 @@ func (n *HookNotifier) sendWebhook(ctx context.Context, config *models.WebhookCo
 	}
 
 	if req.Header.Get("Content-Type") == "" {
-		if config.BodyTemplate != "" {
-			req.Header.Set("Content-Type", "text/plain")
-		} else {
-			req.Header.Set("Content-Type", "application/json")
-		}
+		req.Header.Set("Content-Type", "application/json")
 	}
 
 	n.logger.Debug("Sending webhook", "url", config.URL, "method", method, "check", result.CheckName)
@@ -120,21 +109,15 @@ func (n *HookNotifier) sendWebhook(ctx context.Context, config *models.WebhookCo
 // sendKafkaMessage publishes a notification message to the configured Kafka topic.
 // The message body is either rendered from MessageTemplate (Go template with
 // CheckResult context) or the full CheckResult marshaled as JSON.
-func (n *HookNotifier) sendKafkaMessage(ctx context.Context, config *models.KafkaHookConfig, result *models.CheckResult) error {
+func (n *HookNotifier) sendKafkaMessage(ctx context.Context, config *models.KafkaHookConfig, result *models.CheckResult) (err error) {
 	var messageBody string
 	if config.MessageTemplate != "" {
-		tmpl, err := template.New("kafka_hook").Parse(config.MessageTemplate)
-		if err != nil {
-			return fmt.Errorf("failed to parse kafka message template: %w", err)
+		if messageBody, err = buildFromTemplate(config.MessageTemplate, "kafka_hook", result); err != nil {
+			return err
 		}
-		var buf bytes.Buffer
-		if err := tmpl.Execute(&buf, result); err != nil {
-			return fmt.Errorf("failed to execute kafka message template: %w", err)
-		}
-		messageBody = buf.String()
 	} else {
-		jsonBytes, err := json.Marshal(result)
-		if err != nil {
+		var jsonBytes []byte
+		if jsonBytes, err = json.Marshal(result); err != nil {
 			return fmt.Errorf("failed to marshal result to JSON for kafka hook: %w", err)
 		}
 		messageBody = string(jsonBytes)
@@ -145,4 +128,16 @@ func (n *HookNotifier) sendKafkaMessage(ctx context.Context, config *models.Kafk
 	}
 
 	return nil
+}
+
+func buildFromTemplate(tmpl, tmplname string, result *models.CheckResult) (string, error) {
+	t, err := template.New(tmplname).Parse(tmpl)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse message template '%s': %w", tmplname, err)
+	}
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, result); err != nil {
+		return "", fmt.Errorf("failed to execute message template '%s': %w", tmplname, err)
+	}
+	return buf.String(), nil
 }
