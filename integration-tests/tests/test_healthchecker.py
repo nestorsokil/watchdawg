@@ -26,6 +26,14 @@ def test_kafka_liveness(kafka_hooks):
     kafka_hooks.expect_failure("kafka_liveness", timeout=30)
 
 
+def test_multi_hook(received_webhooks, healthcheck_target):
+    # When a check fails, all on_failure hooks should fire.
+    # Use a generous fail_count so multi_hook_check is guaranteed to see at least one failure
+    # even if dynamic_check (running on the same target) picks up some of the failures first.
+    healthcheck_target.fail_next(amount=10)
+    received_webhooks.expect_failure("multi_hook_check", count=2)
+
+
 def test_grpc_server_health(received_webhooks, grpc_stub):
     received_webhooks.expect_success("grpc_server_health")
     grpc_stub.set_not_serving()

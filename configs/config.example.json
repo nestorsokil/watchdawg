@@ -2,7 +2,6 @@
   "healthchecks": [
     {
       "name": "api-health",
-      "type": "http",
       "schedule": "30s",
       "retries": 2,
       "timeout": 5000000000,
@@ -41,7 +40,6 @@
     },
     {
       "name": "api-with-validation",
-      "type": "http",
       "schedule": "1m",
       "retries": 3,
       "timeout": 10000000000,
@@ -64,7 +62,6 @@
     },
     {
       "name": "api-json-validation",
-      "type": "http",
       "schedule": "2m",
       "retries": 2,
       "timeout": 10000000000,
@@ -88,7 +85,6 @@
     },
     {
       "name": "api-product-validation",
-      "type": "http",
       "schedule": "2m",
       "retries": 2,
       "timeout": 10000000000,
@@ -115,7 +111,6 @@
     },
     {
       "name": "custom-starlark-check",
-      "type": "starlark",
       "schedule": "2m",
       "retries": 1,
       "timeout": 15000000000,
@@ -147,7 +142,6 @@
     },
     {
       "name": "self-signed-cert-api",
-      "type": "http",
       "schedule": "1m",
       "retries": 2,
       "timeout": 10000000000,
@@ -170,7 +164,6 @@
     },
     {
       "name": "multi-hook-example",
-      "type": "http",
       "schedule": "5m",
       "retries": 1,
       "timeout": 10000000000,
@@ -199,7 +192,6 @@
     },
     {
       "name": "grpc-server-health",
-      "type": "grpc",
       "schedule": "30s",
       "retries": 2,
       "timeout": 5000000000,
@@ -218,7 +210,6 @@
     },
     {
       "name": "grpc-service-health",
-      "type": "grpc",
       "schedule": "30s",
       "retries": 2,
       "timeout": 5000000000,
@@ -238,7 +229,6 @@
     },
     {
       "name": "order-events-liveness",
-      "type": "kafka",
       "schedule": "30s",
       "timeout": 5000000000,
       "kafka": {
@@ -258,7 +248,6 @@
     },
     {
       "name": "payment-events-with-assertion",
-      "type": "kafka",
       "schedule": "1m",
       "timeout": 5000000000,
       "kafka": {

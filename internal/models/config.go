@@ -13,7 +13,6 @@ type Config struct {
 
 type HealthCheck struct {
 	Name     string        `json:"name"`
-	Type     CheckType     `json:"type"`
 	Schedule string        `json:"schedule"` // cron format or interval like "30s", "5m"
 	Retries  int           `json:"retries"`
 	Timeout  time.Duration `json:"timeout"`
@@ -26,14 +25,6 @@ type HealthCheck struct {
 	OnFailure []HookConfig         `json:"on_failure,omitempty"`
 }
 
-type CheckType string
-
-const (
-	CheckTypeHTTP     CheckType = "http"
-	CheckTypeStarlark CheckType = "starlark"
-	CheckTypeGRPC     CheckType = "grpc" // Future implementation
-	CheckTypeKafka    CheckType = "kafka"
-)
 
 type ResponseFormat string
 

@@ -65,7 +65,7 @@ func NewScheduler(logger *slog.Logger) *Scheduler {
 func (s *Scheduler) AddHealthCheck(check models.HealthCheck) error {
 	// Kafka checks require a background consumer started before the first
 	// scheduled tick so the consumer is already listening when Execute runs.
-	if check.Type == models.CheckTypeKafka {
+	if check.Kafka != nil {
 		if err := s.kafkaChecker.StartConsumer(s.rootCtx, check); err != nil {
 			return fmt.Errorf("failed to start kafka consumer for check '%s': %w", check.Name, err)
 		}
@@ -136,17 +136,17 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 
 	var result *models.CheckResult
 
-	switch check.Type {
-	case models.CheckTypeHTTP:
+	switch {
+	case check.HTTP != nil:
 		result = s.httpChecker.Execute(ctx, &check)
-	case models.CheckTypeStarlark:
+	case check.Starlark != nil:
 		result = s.starlarkChecker.Execute(ctx, &check)
-	case models.CheckTypeKafka:
+	case check.Kafka != nil:
 		result = s.kafkaChecker.Execute(ctx, &check)
-	case models.CheckTypeGRPC:
+	case check.GRPC != nil:
 		result = s.grpcChecker.Execute(ctx, &check)
 	default:
-		s.logger.Error("Unknown check type", "type", check.Type, "check", check.Name)
+		s.logger.Error("Check has no recognizable sub-config; skipping", "check", check.Name)
 		return
 	}
 

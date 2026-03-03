@@ -2,7 +2,6 @@
   "healthchecks": [
     {
       "name": "google-health",
-      "type": "http",
       "schedule": "10s",
       "retries": 1,
       "timeout": 5000000000,
@@ -14,7 +13,6 @@
     },
     {
       "name": "simple-starlark-check",
-      "type": "starlark",
       "schedule": "15s",
       "retries": 0,
       "timeout": 5000000000,

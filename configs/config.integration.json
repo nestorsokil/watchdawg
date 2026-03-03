@@ -2,7 +2,6 @@
   "healthchecks": [
     {
       "name": "dynamic_check",
-      "type": "http",
       "schedule": "3s",
       "retries": 0,
       "timeout": 2000000000,
@@ -28,8 +27,45 @@
       ]
     },
     {
+      "name": "multi_hook_check",
+      "schedule": "3s",
+      "retries": 0,
+      "timeout": 2000000000,
+      "http": {
+        "url": "http://integration-tests:8080/target/health",
+        "method": "GET"
+      },
+      "on_success": [
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/success",
+            "method": "POST"
+          }
+        },
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/success",
+            "method": "POST"
+          }
+        }
+      ],
+      "on_failure": [
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/failure",
+            "method": "POST"
+          }
+        },
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/failure",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
       "name": "kafka_assertion",
-      "type": "kafka",
       "schedule": "5s",
       "timeout": 10000000000,
       "kafka": {
@@ -58,7 +94,6 @@
     },
     {
       "name": "grpc_server_health",
-      "type": "grpc",
       "schedule": "3s",
       "retries": 0,
       "timeout": 2000000000,
@@ -85,7 +120,6 @@
     },
     {
       "name": "grpc_service_health",
-      "type": "grpc",
       "schedule": "3s",
       "retries": 0,
       "timeout": 2000000000,
@@ -113,7 +147,6 @@
     },
     {
       "name": "kafka_liveness",
-      "type": "kafka",
       "schedule": "5s",
       "timeout": 10000000000,
       "kafka": {

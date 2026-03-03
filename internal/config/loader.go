@@ -42,28 +42,39 @@ func validateConfig(config *models.Config) error {
 			return fmt.Errorf("healthcheck[%d] (%s): schedule is required", i, check.Name)
 		}
 
-		switch check.Type {
-		case models.CheckTypeHTTP:
-			if check.HTTP == nil {
-				return fmt.Errorf("healthcheck[%d] (%s): HTTP config is required for type 'http'", i, check.Name)
-			}
+		set := 0
+		if check.HTTP != nil {
+			set++
+		}
+		if check.Starlark != nil {
+			set++
+		}
+		if check.Kafka != nil {
+			set++
+		}
+		if check.GRPC != nil {
+			set++
+		}
+		if set == 0 {
+			return fmt.Errorf("healthcheck[%d] (%s): exactly one of http/starlark/kafka/grpc must be set", i, check.Name)
+		}
+		if set > 1 {
+			return fmt.Errorf("healthcheck[%d] (%s): only one check type may be specified", i, check.Name)
+		}
+
+		switch {
+		case check.HTTP != nil:
 			if check.HTTP.URL == "" {
 				return fmt.Errorf("healthcheck[%d] (%s): HTTP URL is required", i, check.Name)
 			}
 			if check.HTTP.Method == "" {
 				check.HTTP.Method = "GET"
 			}
-		case models.CheckTypeStarlark:
-			if check.Starlark == nil {
-				return fmt.Errorf("healthcheck[%d] (%s): Starlark config is required for type 'starlark'", i, check.Name)
-			}
+		case check.Starlark != nil:
 			if check.Starlark.Script == "" {
 				return fmt.Errorf("healthcheck[%d] (%s): Starlark script is required", i, check.Name)
 			}
-		case models.CheckTypeKafka:
-			if check.Kafka == nil {
-				return fmt.Errorf("healthcheck[%d] (%s): kafka config is required for type 'kafka'", i, check.Name)
-			}
+		case check.Kafka != nil:
 			if len(check.Kafka.Brokers) == 0 {
 				return fmt.Errorf("healthcheck[%d] (%s): at least one kafka broker is required", i, check.Name)
 			}
@@ -78,15 +89,10 @@ func validateConfig(config *models.Config) error {
 			if check.Kafka.GroupID == "" {
 				config.HealthChecks[i].Kafka.GroupID = "watchdawg-" + check.Name
 			}
-		case models.CheckTypeGRPC:
-			if check.GRPC == nil {
-				return fmt.Errorf("healthcheck[%d] (%s): grpc config is required for type 'grpc'", i, check.Name)
-			}
+		case check.GRPC != nil:
 			if check.GRPC.Target == "" {
 				return fmt.Errorf("healthcheck[%d] (%s): grpc target is required", i, check.Name)
 			}
-		default:
-			return fmt.Errorf("healthcheck[%d] (%s): unknown check type '%s'", i, check.Name, check.Type)
 		}
 
 		if check.Retries < 0 {

@@ -67,7 +67,6 @@ func newMockedKafkaChecker(mock *mockKafkaReader) *KafkaChecker {
 func kafkaCheck(name, schedule string) models.HealthCheck {
 	return models.HealthCheck{
 		Name:     name,
-		Type:     models.CheckTypeKafka,
 		Schedule: schedule,
 		Timeout:  5 * time.Second,
 		Kafka: &models.KafkaCheckConfig{

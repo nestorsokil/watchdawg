@@ -22,11 +22,11 @@ class ReceivedWebhooks:
     def _matching(self, results, check_name):
         return [r for r in results if r['json'] and r['json'].get('check_name') == check_name]
 
-    def expect_success(self, check_name, timeout=30):
+    def expect_success(self, check_name, timeout=30, count=1):
         wait_for(
-            lambda: len(self._matching(self.success(), check_name)) >= 1,
+            lambda: len(self._matching(self.success(), check_name)) >= count,
             timeout=timeout,
-            description=f"on_success webhook for '{check_name}'",
+            description=f"{count} on_success webhook(s) for '{check_name}'",
         )
         matching = self._matching(self.success(), check_name)
         logging.info(f"Received {len(matching)} success webhook(s) for check '{check_name}'")
@@ -35,11 +35,11 @@ class ReceivedWebhooks:
             assert_that(result['json']['check_name']).is_equal_to(check_name)
         return matching
 
-    def expect_failure(self, check_name, timeout=30):
+    def expect_failure(self, check_name, timeout=30, count=1):
         wait_for(
-            lambda: len(self._matching(self.failure(), check_name)) >= 1,
+            lambda: len(self._matching(self.failure(), check_name)) >= count,
             timeout=timeout,
-            description=f"on_failure webhook for '{check_name}'",
+            description=f"{count} on_failure webhook(s) for '{check_name}'",
         )
         matching = self._matching(self.failure(), check_name)
         logging.info(f"Received {len(matching)} failure webhook(s) for check '{check_name}'")

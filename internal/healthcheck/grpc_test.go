@@ -56,7 +56,6 @@ func startHealthServer(t *testing.T) (*health.Server, func(target string, _ bool
 func newTestGRPCCheck(service string) *models.HealthCheck {
 	return &models.HealthCheck{
 		Name:    "test-grpc",
-		Type:    models.CheckTypeGRPC,
 		Retries: 0,
 		Timeout: 5 * time.Second,
 		GRPC: &models.GRPCCheckConfig{

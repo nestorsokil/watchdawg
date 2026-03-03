@@ -82,7 +82,6 @@ func TestExecuteHealthCheck_HTTPSuccess(t *testing.T) {
 	s := NewScheduler(testLogger())
 	s.executeHealthCheck(models.HealthCheck{
 		Name:    "test",
-		Type:    models.CheckTypeHTTP,
 		Timeout: 5 * time.Second,
 		HTTP:    &models.HTTPCheckConfig{URL: srv.URL, Method: "GET"},
 	})
@@ -93,7 +92,6 @@ func TestExecuteHealthCheck_StarlarkSuccess(t *testing.T) {
 	s := NewScheduler(testLogger())
 	s.executeHealthCheck(models.HealthCheck{
 		Name:    "test",
-		Type:    models.CheckTypeStarlark,
 		Timeout: 5 * time.Second,
 		Starlark: &models.StarlarkCheckConfig{
 			Script: "healthy = True",
@@ -101,12 +99,12 @@ func TestExecuteHealthCheck_StarlarkSuccess(t *testing.T) {
 	})
 }
 
-func TestExecuteHealthCheck_UnknownType(t *testing.T) {
+func TestExecuteHealthCheck_NoSubConfig(t *testing.T) {
 	s := NewScheduler(testLogger())
-	// Unknown check type should log an error but not panic.
+	// A check with no sub-config should log an error but not panic.
+	// (In practice, config validation prevents this from reaching the scheduler.)
 	s.executeHealthCheck(models.HealthCheck{
 		Name:    "test",
-		Type:    models.CheckType("not-a-real-type"),
 		Timeout: 5 * time.Second,
 	})
 }
@@ -127,7 +125,6 @@ func TestExecuteHealthCheck_SuccessWebhookFired(t *testing.T) {
 	s := NewScheduler(testLogger())
 	s.executeHealthCheck(models.HealthCheck{
 		Name:      "test",
-		Type:      models.CheckTypeHTTP,
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
 		OnSuccess: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}},
@@ -154,7 +151,6 @@ func TestExecuteHealthCheck_FailureWebhookFired(t *testing.T) {
 	s := NewScheduler(testLogger())
 	s.executeHealthCheck(models.HealthCheck{
 		Name:      "test",
-		Type:      models.CheckTypeHTTP,
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
 		OnFailure: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}},
@@ -181,7 +177,6 @@ func TestExecuteHealthCheck_SuccessWebhookNotFiredOnFailure(t *testing.T) {
 	s := NewScheduler(testLogger())
 	s.executeHealthCheck(models.HealthCheck{
 		Name:      "test",
-		Type:      models.CheckTypeHTTP,
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
 		OnSuccess: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}}, // only success hook
@@ -189,6 +184,84 @@ func TestExecuteHealthCheck_SuccessWebhookNotFiredOnFailure(t *testing.T) {
 
 	if n := atomic.LoadInt32(&webhookCalled); n != 0 {
 		t.Fatal("expected success webhook NOT fired when check fails")
+	}
+}
+
+func TestExecuteHealthCheck_MultipleSuccessHooksAllFired(t *testing.T) {
+	var firstCalled, secondCalled int32
+
+	firstSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&firstCalled, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer firstSrv.Close()
+
+	secondSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&secondCalled, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer secondSrv.Close()
+
+	checkSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer checkSrv.Close()
+
+	s := NewScheduler(testLogger())
+	s.executeHealthCheck(models.HealthCheck{
+		Name:    "test",
+		Timeout: 5 * time.Second,
+		HTTP:    &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
+		OnSuccess: []models.HookConfig{
+			{HTTP: &models.WebhookConfig{URL: firstSrv.URL}},
+			{HTTP: &models.WebhookConfig{URL: secondSrv.URL}},
+		},
+	})
+
+	if n := atomic.LoadInt32(&firstCalled); n != 1 {
+		t.Fatalf("expected first success hook called once, got %d", n)
+	}
+	if n := atomic.LoadInt32(&secondCalled); n != 1 {
+		t.Fatalf("expected second success hook called once, got %d", n)
+	}
+}
+
+func TestExecuteHealthCheck_MultipleFailureHooksAllFired(t *testing.T) {
+	var firstCalled, secondCalled int32
+
+	firstSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&firstCalled, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer firstSrv.Close()
+
+	secondSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&secondCalled, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer secondSrv.Close()
+
+	checkSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer checkSrv.Close()
+
+	s := NewScheduler(testLogger())
+	s.executeHealthCheck(models.HealthCheck{
+		Name:    "test",
+		Timeout: 5 * time.Second,
+		HTTP:    &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
+		OnFailure: []models.HookConfig{
+			{HTTP: &models.WebhookConfig{URL: firstSrv.URL}},
+			{HTTP: &models.WebhookConfig{URL: secondSrv.URL}},
+		},
+	})
+
+	if n := atomic.LoadInt32(&firstCalled); n != 1 {
+		t.Fatalf("expected first failure hook called once, got %d", n)
+	}
+	if n := atomic.LoadInt32(&secondCalled); n != 1 {
+		t.Fatalf("expected second failure hook called once, got %d", n)
 	}
 }
 
@@ -208,7 +281,6 @@ func TestExecuteHealthCheck_FailureWebhookNotFiredOnSuccess(t *testing.T) {
 	s := NewScheduler(testLogger())
 	s.executeHealthCheck(models.HealthCheck{
 		Name:      "test",
-		Type:      models.CheckTypeHTTP,
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
 		OnFailure: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}}, // only failure hook
