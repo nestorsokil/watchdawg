@@ -20,8 +20,8 @@ func main() {
 	configPath := flag.String("config", "config.json", "Path to configuration file")
 	flag.Parse()
 
-	logger.Info("Loading configuration", "path", *configPath)
-	cfg, err := config.LoadFromFile(*configPath)
+	logger.Info("Loading configuration", "source", *configPath)
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		logger.Error("Failed to load configuration", "error", err)
 		os.Exit(1)

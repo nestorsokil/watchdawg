@@ -59,7 +59,39 @@ cp config.example.json config.json
 
 ## Configuration
 
-WatchDawg uses JSON configuration files. See `config.example.json` for a complete example.
+### Loading Config
+
+WatchDawg supports three config sources:
+
+**File (default)**
+```bash
+./bin/watchdawg -config configs/config.json
+```
+
+**Stdin** — pipe from anywhere
+```bash
+# From a remote URL
+curl -s https://example.com/watchdawg.json | ./bin/watchdawg -config -
+
+# From a secret manager
+vault kv get -field=config secret/watchdawg | ./bin/watchdawg -config -
+
+# From a YAML file (requires yq)
+yq -o=json configs/config.example.yaml | ./bin/watchdawg -config -
+```
+
+A YAML reference config is available at `configs/config.example.yaml`.
+
+**Environment variable substitution** — use `$VAR` or `${VAR}` anywhere in the JSON:
+```json
+{
+  "http": {
+    "url": "https://${API_HOST}/health",
+    "headers": { "Authorization": "Bearer $API_TOKEN" }
+  }
+}
+```
+Variables are expanded from the process environment before parsing. Unset variables expand to an empty string.
 
 ### Basic Structure
 
@@ -328,13 +360,9 @@ If `body_template` is not provided, the full check result is sent as JSON.
 
 ## Roadmap
 
-- [ ] HTTP endpoint for dynamic check management
 - [ ] Starlark HTTP client for making requests from scripts
-- [ ] gRPC health checks
-- [ ] Kafka health checks
 - [ ] Metrics and monitoring endpoint
 - [ ] Check result history and reporting
-- [ ] Web dashboard
 
 ## License
 

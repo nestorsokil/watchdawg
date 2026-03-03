@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -10,14 +11,27 @@ import (
 	"watchdawg/internal/models"
 )
 
-func LoadFromFile(path string) (*models.Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+func Load(path string) (*models.Config, error) {
+	var (
+		data []byte
+		err  error
+	)
+	if path == "-" {
+		data, err = io.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read config from stdin: %w", err)
+		}
+	} else {
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
 	}
 
+	expanded := os.ExpandEnv(string(data))
+
 	var config models.Config
-	if err := json.Unmarshal(data, &config); err != nil {
+	if err := json.Unmarshal([]byte(expanded), &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
 	}
 
