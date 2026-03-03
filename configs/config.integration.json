@@ -28,6 +28,35 @@
       ]
     },
     {
+      "name": "kafka_assertion",
+      "type": "kafka",
+      "schedule": "5s",
+      "timeout": 10000000000,
+      "kafka": {
+        "brokers": ["kafka:9092"],
+        "topic": "watchdawg-assertion-input",
+        "group_id": "watchdawg-assertion",
+        "format": "json",
+        "assertion": "result['status'] == 'ok'"
+      },
+      "on_success": [
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/success",
+            "method": "POST"
+          }
+        }
+      ],
+      "on_failure": [
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/failure",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
       "name": "kafka_liveness",
       "type": "kafka",
       "schedule": "5s",

@@ -19,29 +19,34 @@ class ReceivedWebhooks:
         with _lock:
             return list(FAILURE)
 
-    def expect_success(self, check_name, times_expected=1, timeout=30):
-        wait_for(lambda: len(self.success()) == times_expected,
-                 timeout=timeout,
-                 description=f"on_success webhook for {check_name}")
-        successes = self.success()
-        logging.info(f"Received successful results via webhook for check '{check_name}'")
-        assert_that(len(successes)).is_greater_than_or_equal_to(times_expected)
-        for result in successes:
+    def _matching(self, results, check_name):
+        return [r for r in results if r['json'] and r['json'].get('check_name') == check_name]
+
+    def expect_success(self, check_name, timeout=30):
+        wait_for(
+            lambda: len(self._matching(self.success(), check_name)) >= 1,
+            timeout=timeout,
+            description=f"on_success webhook for '{check_name}'",
+        )
+        matching = self._matching(self.success(), check_name)
+        logging.info(f"Received {len(matching)} success webhook(s) for check '{check_name}'")
+        for result in matching:
             assert_that(result['json']['healthy']).is_true()
             assert_that(result['json']['check_name']).is_equal_to(check_name)
-        return successes
+        return matching
 
-    def expect_failure(self, check_name=None, times_expected=1, timeout=30):
-        wait_for(lambda: len(self.failure()) == times_expected,
-                 timeout=timeout,
-                 description=f"on_failure webhook for {check_name}")
-        failures = self.failure()
-        logging.info(f"Received failed results via webhook for check '{check_name}'")
-        assert_that(len(failures)).is_equal_to(times_expected)
-        for result in failures:
+    def expect_failure(self, check_name, timeout=30):
+        wait_for(
+            lambda: len(self._matching(self.failure(), check_name)) >= 1,
+            timeout=timeout,
+            description=f"on_failure webhook for '{check_name}'",
+        )
+        matching = self._matching(self.failure(), check_name)
+        logging.info(f"Received {len(matching)} failure webhook(s) for check '{check_name}'")
+        for result in matching:
             assert_that(result['json']['healthy']).is_false()
             assert_that(result['json']['check_name']).is_equal_to(check_name)
-        return failures
+        return matching
 
 
 @app.route("/callback/success", methods=["POST"])

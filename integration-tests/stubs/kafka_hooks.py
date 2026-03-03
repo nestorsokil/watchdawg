@@ -15,6 +15,7 @@ from kafka import KafkaConsumer, KafkaProducer
 
 BROKERS = ["kafka:9092"]
 TARGET_TOPIC = "watchdawg-target"
+ASSERTION_TOPIC = "watchdawg-assertion-input"
 SUCCESS_TOPIC = "watchdawg-success"
 FAILURE_TOPIC = "watchdawg-failure"
 
@@ -27,6 +28,13 @@ class KafkaHooks:
     def send(self, value="ping"):
         producer = KafkaProducer(bootstrap_servers=BROKERS)
         producer.send(TARGET_TOPIC, value.encode("utf-8"))
+        producer.flush()
+        producer.close()
+
+    def send_json(self, data, topic=ASSERTION_TOPIC):
+        """Send a JSON-encoded message to the given topic (default: assertion input topic)."""
+        producer = KafkaProducer(bootstrap_servers=BROKERS)
+        producer.send(topic, json.dumps(data).encode("utf-8"))
         producer.flush()
         producer.close()
 
