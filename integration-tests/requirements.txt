@@ -4,3 +4,5 @@ assertpy==1.1
 requests==2.32.4
 flask
 kafka-python
+grpcio
+grpcio-health-checking

@@ -24,3 +24,15 @@ def test_kafka_liveness(kafka_hooks):
     # WatchDawg fires the on_failure hook to the failure Kafka topic.
     # Timeout is generous to account for scheduler jitter (up to 2× interval).
     kafka_hooks.expect_failure("kafka_liveness", timeout=30)
+
+
+def test_grpc_server_health(received_webhooks, grpc_stub):
+    received_webhooks.expect_success("grpc_server_health")
+    grpc_stub.set_not_serving()
+    received_webhooks.expect_failure("grpc_server_health")
+
+
+def test_grpc_service_health(received_webhooks, grpc_stub):
+    received_webhooks.expect_success("grpc_service_health")
+    grpc_stub.set_not_serving(service="integration.TestService")
+    received_webhooks.expect_failure("grpc_service_health")

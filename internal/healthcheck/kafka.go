@@ -179,9 +179,6 @@ func (k *KafkaChecker) Execute(ctx context.Context, check *models.HealthCheck) *
 	}
 
 	state.mu.RLock()
-	hasMsg := state.hasReceivedMessage
-	lastTime := state.lastMessageTime
-	expectedInterval := state.expectedInterval
 	var lastMsg *receivedMessage
 	if state.lastMessage != nil {
 		msgCopy := *state.lastMessage
@@ -190,18 +187,18 @@ func (k *KafkaChecker) Execute(ctx context.Context, check *models.HealthCheck) *
 	state.mu.RUnlock()
 
 	// No messages yet: report healthy while waiting for the producer to start.
-	if !hasMsg {
+	if !state.hasReceivedMessage {
 		result.Healthy = true
 		result.Message = fmt.Sprintf("waiting for first message on topic '%s'", check.Kafka.Topic)
 		result.Duration = time.Since(startTime).Milliseconds()
 		return result
 	}
 
-	age := time.Since(lastTime)
-	if age > expectedInterval {
+	age := time.Since(state.lastMessageTime)
+	if age > state.expectedInterval {
 		result.Healthy = false
 		result.Message = fmt.Sprintf("no message on topic '%s' for %v (expected at least every %v)",
-			check.Kafka.Topic, age.Truncate(time.Millisecond), expectedInterval)
+			check.Kafka.Topic, age.Truncate(time.Millisecond), state.expectedInterval)
 		result.Duration = time.Since(startTime).Milliseconds()
 		return result
 	}

@@ -5,6 +5,7 @@ import pytest
 from stubs import webhook_receiver
 from stubs import healthcheck_target as _healthcheck_target_mod
 from stubs import kafka_hooks as _kafka_hooks_mod
+from stubs import grpc_stub as _grpc_stub_mod
 
 logging.getLogger("kafka").setLevel(logging.WARNING)
 
@@ -26,6 +27,19 @@ def _start_healthcheck_target():
 @pytest.fixture(scope="session", autouse=True)
 def _start_kafka_consumers():
     _kafka_hooks_mod.start()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _start_grpc_stub():
+    t = threading.Thread(target=_grpc_stub_mod.main, daemon=True)
+    t.start()
+
+
+@pytest.fixture
+def grpc_stub():
+    _grpc_stub_mod.reset()
+    yield _grpc_stub_mod.GRPCStub()
+    _grpc_stub_mod.reset()
 
 
 @pytest.fixture

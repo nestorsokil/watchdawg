@@ -79,7 +79,12 @@ func validateConfig(config *models.Config) error {
 				config.HealthChecks[i].Kafka.GroupID = "watchdawg-" + check.Name
 			}
 		case models.CheckTypeGRPC:
-			return fmt.Errorf("healthcheck[%d] (%s): type 'grpc' not yet implemented", i, check.Name)
+			if check.GRPC == nil {
+				return fmt.Errorf("healthcheck[%d] (%s): grpc config is required for type 'grpc'", i, check.Name)
+			}
+			if check.GRPC.Target == "" {
+				return fmt.Errorf("healthcheck[%d] (%s): grpc target is required", i, check.Name)
+			}
 		default:
 			return fmt.Errorf("healthcheck[%d] (%s): unknown check type '%s'", i, check.Name, check.Type)
 		}

@@ -21,6 +21,7 @@ type HealthCheck struct {
 	HTTP      *HTTPCheckConfig     `json:"http,omitempty"`
 	Starlark  *StarlarkCheckConfig `json:"starlark,omitempty"`
 	Kafka     *KafkaCheckConfig    `json:"kafka,omitempty"`
+	GRPC      *GRPCCheckConfig     `json:"grpc,omitempty"`
 	OnSuccess []HookConfig         `json:"on_success,omitempty"`
 	OnFailure []HookConfig         `json:"on_failure,omitempty"`
 }
@@ -146,6 +147,18 @@ type KafkaCheckConfig struct {
 	// headers (dict), result (parsed value when format is set).
 	// Supports the same simple-expression and full-script modes as HTTP checks.
 	Assertion string `json:"assertion,omitempty"`
+}
+
+// GRPCCheckConfig defines a standard gRPC health check using grpc.health.v1.Health/Check.
+// An empty Service performs a server-level check; a non-empty Service checks that named service.
+type GRPCCheckConfig struct {
+	Target    string `json:"target"`               // "host:port"
+	PlainText bool   `json:"plaintext,omitempty"`  // skip TLS (common for internal services)
+	VerifyTLS *bool  `json:"verify_tls,omitempty"` // false = accept self-signed certs
+
+	// Service is the fully-qualified gRPC service name to check.
+	// Leave empty for a server-level health check.
+	Service string `json:"service,omitempty"`
 }
 
 type WebhookConfig struct {

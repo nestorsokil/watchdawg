@@ -34,6 +34,7 @@ type Scheduler struct {
 	httpChecker     *HTTPChecker
 	starlarkChecker *StarlarkChecker
 	kafkaChecker    *KafkaChecker
+	grpcChecker     *GRPCChecker
 	notifier        *HookNotifier
 	logger          *slog.Logger
 	// rootCtx is cancelled in Stop to signal background workers (e.g. Kafka consumers).
@@ -53,6 +54,7 @@ func NewScheduler(logger *slog.Logger) *Scheduler {
 		httpChecker:     NewHTTPChecker(logger),
 		starlarkChecker: NewStarlarkChecker(logger),
 		kafkaChecker:    NewKafkaChecker(logger),
+		grpcChecker:     NewGRPCChecker(logger),
 		notifier:        NewHookNotifier(logger),
 		logger:          logger,
 		rootCtx:         rootCtx,
@@ -141,6 +143,8 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 		result = s.starlarkChecker.Execute(ctx, &check)
 	case models.CheckTypeKafka:
 		result = s.kafkaChecker.Execute(ctx, &check)
+	case models.CheckTypeGRPC:
+		result = s.grpcChecker.Execute(ctx, &check)
 	default:
 		s.logger.Error("Unknown check type", "type", check.Type, "check", check.Name)
 		return

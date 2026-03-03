@@ -198,6 +198,45 @@
       ]
     },
     {
+      "name": "grpc-server-health",
+      "type": "grpc",
+      "schedule": "30s",
+      "retries": 2,
+      "timeout": 5000000000,
+      "grpc": {
+        "target": "myservice:50051",
+        "plaintext": true
+      },
+      "on_failure": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-failure-webhook",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
+      "name": "grpc-service-health",
+      "type": "grpc",
+      "schedule": "30s",
+      "retries": 2,
+      "timeout": 5000000000,
+      "grpc": {
+        "target": "myservice:50051",
+        "plaintext": true,
+        "service": "my.package.MyService"
+      },
+      "on_failure": [
+        {
+          "http": {
+            "url": "https://webhook.site/your-failure-webhook",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
       "name": "order-events-liveness",
       "type": "kafka",
       "schedule": "30s",

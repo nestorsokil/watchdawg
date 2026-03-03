@@ -106,7 +106,7 @@ func TestExecuteHealthCheck_UnknownType(t *testing.T) {
 	// Unknown check type should log an error but not panic.
 	s.executeHealthCheck(models.HealthCheck{
 		Name:    "test",
-		Type:    models.CheckType("grpc"),
+		Type:    models.CheckType("not-a-real-type"),
 		Timeout: 5 * time.Second,
 	})
 }

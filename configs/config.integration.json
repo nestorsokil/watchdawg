@@ -57,6 +57,61 @@
       ]
     },
     {
+      "name": "grpc_server_health",
+      "type": "grpc",
+      "schedule": "3s",
+      "retries": 0,
+      "timeout": 2000000000,
+      "grpc": {
+        "target": "integration-tests:50051",
+        "plaintext": true
+      },
+      "on_success": [
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/success",
+            "method": "POST"
+          }
+        }
+      ],
+      "on_failure": [
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/failure",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
+      "name": "grpc_service_health",
+      "type": "grpc",
+      "schedule": "3s",
+      "retries": 0,
+      "timeout": 2000000000,
+      "grpc": {
+        "target": "integration-tests:50051",
+        "plaintext": true,
+        "service": "integration.TestService"
+      },
+      "on_success": [
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/success",
+            "method": "POST"
+          }
+        }
+      ],
+      "on_failure": [
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/failure",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
       "name": "kafka_liveness",
       "type": "kafka",
       "schedule": "5s",

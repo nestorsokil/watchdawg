@@ -11,6 +11,7 @@ type CheckResult struct {
 	Attempt   int       `json:"attempt"` // 1-based retry attempt number
 
 	HTTPResult *HTTPResult `json:"http_result,omitempty"`
+	GRPCResult *GRPCResult `json:"grpc_result,omitempty"`
 	Error      string      `json:"error,omitempty"`
 }
 
@@ -19,4 +20,10 @@ type HTTPResult struct {
 	Headers    map[string]string `json:"headers,omitempty"`
 	Body       string            `json:"body,omitempty"`
 	BodySize   int               `json:"body_size"`
+}
+
+type GRPCResult struct {
+	// HealthStatus is the grpc.health.v1 status string: "SERVING", "NOT_SERVING",
+	// "SERVICE_UNKNOWN", or "UNKNOWN".
+	HealthStatus string `json:"health_status,omitempty"`
 }
