@@ -29,15 +29,25 @@ func (a cronSlogAdapter) Error(err error, msg string, keysAndValues ...interface
 	a.logger.Error(msg, args...)
 }
 
+// Checker executes a single health check and returns its result.
+type Checker interface {
+	IsMatching(check *models.HealthCheck) bool
+	Init(ctx context.Context, check *models.HealthCheck) error
+	Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult
+	Cleanup(ctx context.Context) error
+}
+
+type NoOpInitializer struct{}
+
+func (NoOpInitializer) Init(ctx context.Context, check *models.HealthCheck) error { return nil }
+func (NoOpInitializer) Cleanup(ctx context.Context) error                         { return nil }
+
 type Scheduler struct {
-	cron            *cron.Cron
-	httpChecker     *HTTPChecker
-	starlarkChecker *StarlarkChecker
-	kafkaChecker    *KafkaChecker
-	grpcChecker     *GRPCChecker
-	notifier        *HookNotifier
-	recorder        MetricsRecorder
-	logger          *slog.Logger
+	cron                   *cron.Cron
+	checkers []Checker
+	notifier               *HookNotifier
+	recorder               MetricsRecorder
+	logger                 *slog.Logger
 	// rootCtx is cancelled in Stop to signal background workers (e.g. Kafka consumers).
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
@@ -46,30 +56,32 @@ type Scheduler struct {
 func NewScheduler(logger *slog.Logger, recorder MetricsRecorder) *Scheduler {
 	adapter := cronSlogAdapter{logger: logger}
 	rootCtx, rootCancel := context.WithCancel(context.Background())
+
 	return &Scheduler{
 		cron: cron.New(
 			cron.WithSeconds(),
 			cron.WithChain(cron.Recover(adapter)),
 			cron.WithLogger(adapter),
 		),
-		httpChecker:     NewHTTPChecker(logger, recorder),
-		starlarkChecker: NewStarlarkChecker(logger, recorder),
-		kafkaChecker:    NewKafkaChecker(logger, recorder),
-		grpcChecker:     NewGRPCChecker(logger, recorder),
-		notifier:        NewHookNotifier(logger, recorder),
-		recorder:        recorder,
-		logger:          logger,
-		rootCtx:         rootCtx,
-		rootCancel:      rootCancel,
+		checkers: []Checker {
+			NewHTTPChecker(logger, recorder),
+			NewGRPCChecker(logger, recorder),
+			NewKafkaChecker(logger, recorder),
+			NewStarlarkChecker(logger, recorder),
+		},
+		notifier:   NewHookNotifier(logger, recorder),
+		recorder:   recorder,
+		logger:     logger,
+		rootCtx:    rootCtx,
+		rootCancel: rootCancel,
 	}
 }
 
 func (s *Scheduler) AddHealthCheck(check models.HealthCheck) error {
-	// Kafka checks require a background consumer started before the first
-	// scheduled tick so the consumer is already listening when Execute runs.
-	if check.Kafka != nil {
-		if err := s.kafkaChecker.StartConsumer(s.rootCtx, check); err != nil {
-			return fmt.Errorf("failed to start kafka consumer for check '%s': %w", check.Name, err)
+	for _, checker := range s.checkers {
+		if checker.IsMatching(&check) {
+			checker.Init(s.rootCtx, &check)
+			break
 		}
 	}
 
@@ -97,7 +109,11 @@ func (s *Scheduler) Stop() {
 	ctx := s.cron.Stop()
 	<-ctx.Done()
 	s.rootCancel()
-	s.kafkaChecker.Stop()
+	for _, check := range s.checkers {
+		if err := check.Cleanup(ctx); err != nil {
+			s.logger.Error(fmt.Sprintf("Failed cleanup on checker %T: %v", check, err))
+		}
+	}
 	s.logger.Info("Scheduler stopped")
 }
 
@@ -136,21 +152,20 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 	ctx, cancel := context.WithTimeout(context.Background(), check.Timeout)
 	defer cancel()
 
-	var result *models.CheckResult
+	var checker Checker
+	for _, entry := range s.checkers {
+		if entry.IsMatching(&check) {
+			checker = entry
+			break
+		}
+	}
 
-	switch {
-	case check.HTTP != nil:
-		result = s.httpChecker.Execute(ctx, &check)
-	case check.Starlark != nil:
-		result = s.starlarkChecker.Execute(ctx, &check)
-	case check.Kafka != nil:
-		result = s.kafkaChecker.Execute(ctx, &check)
-	case check.GRPC != nil:
-		result = s.grpcChecker.Execute(ctx, &check)
-	default:
+	if checker == nil {
 		s.logger.Error("Check has no recognizable sub-config; skipping", "check", check.Name)
 		return
 	}
+
+	result := checker.Execute(ctx, &check)
 
 	s.recorder.RecordCheckUp(check.Name, result.Healthy)
 

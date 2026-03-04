@@ -108,10 +108,10 @@ func TestKafkaChecker_NoMessagesYet_ReportsHealthy(t *testing.T) {
 	checker := newMockedKafkaChecker(mock)
 
 	check := kafkaCheck("no-msg", "30s")
-	if err := checker.StartConsumer(context.Background(), check); err != nil {
+	if err := checker.Init(context.Background(), &check); err != nil {
 		t.Fatalf("StartConsumer: %v", err)
 	}
-	defer checker.Stop()
+	defer checker.Cleanup(context.Background())
 
 	result := checker.Execute(context.Background(), &check)
 	if !result.Healthy {
@@ -127,10 +127,10 @@ func TestKafkaChecker_MessageWithinInterval_ReportsHealthy(t *testing.T) {
 	checker := newMockedKafkaChecker(mock)
 
 	check := kafkaCheck("within-interval", "30s")
-	if err := checker.StartConsumer(context.Background(), check); err != nil {
+	if err := checker.Init(context.Background(), &check); err != nil {
 		t.Fatalf("StartConsumer: %v", err)
 	}
-	defer checker.Stop()
+	defer checker.Cleanup(context.Background())
 
 	sendAndWait(t, checker, mock, check.Name, kafka.Message{Value: []byte("hello")})
 
@@ -145,10 +145,10 @@ func TestKafkaChecker_MessageTooOld_ReportsUnhealthy(t *testing.T) {
 	checker := newMockedKafkaChecker(mock)
 
 	check := kafkaCheck("stale-msg", "30s")
-	if err := checker.StartConsumer(context.Background(), check); err != nil {
+	if err := checker.Init(context.Background(), &check); err != nil {
 		t.Fatalf("StartConsumer: %v", err)
 	}
-	defer checker.Stop()
+	defer checker.Cleanup(context.Background())
 
 	sendAndWait(t, checker, mock, check.Name, kafka.Message{Value: []byte("old")})
 
@@ -188,10 +188,10 @@ func TestKafkaChecker_AssertionPasses_ReportsHealthy(t *testing.T) {
 	check := kafkaCheck("assert-pass", "30s")
 	check.Kafka.Assertion = `"hello" in value`
 
-	if err := checker.StartConsumer(context.Background(), check); err != nil {
+	if err := checker.Init(context.Background(), &check); err != nil {
 		t.Fatalf("StartConsumer: %v", err)
 	}
-	defer checker.Stop()
+	defer checker.Cleanup(context.Background())
 
 	sendAndWait(t, checker, mock, check.Name, kafka.Message{Value: []byte("hello world")})
 
@@ -208,10 +208,10 @@ func TestKafkaChecker_AssertionFails_ReportsUnhealthy(t *testing.T) {
 	check := kafkaCheck("assert-fail", "30s")
 	check.Kafka.Assertion = `"secret" in value`
 
-	if err := checker.StartConsumer(context.Background(), check); err != nil {
+	if err := checker.Init(context.Background(), &check); err != nil {
 		t.Fatalf("StartConsumer: %v", err)
 	}
-	defer checker.Stop()
+	defer checker.Cleanup(context.Background())
 
 	sendAndWait(t, checker, mock, check.Name, kafka.Message{Value: []byte("hello world")})
 
@@ -229,10 +229,10 @@ func TestKafkaChecker_JSONAssertion_ReportsHealthy(t *testing.T) {
 	check.Kafka.Format = models.ResponseFormatJSON
 	check.Kafka.Assertion = `result["status"] == "ok"`
 
-	if err := checker.StartConsumer(context.Background(), check); err != nil {
+	if err := checker.Init(context.Background(), &check); err != nil {
 		t.Fatalf("StartConsumer: %v", err)
 	}
-	defer checker.Stop()
+	defer checker.Cleanup(context.Background())
 
 	sendAndWait(t, checker, mock, check.Name, kafka.Message{Value: []byte(`{"status":"ok"}`)})
 
@@ -250,10 +250,10 @@ func TestKafkaChecker_InvalidJSONWithFormat_ReportsUnhealthy(t *testing.T) {
 	check.Kafka.Format = models.ResponseFormatJSON
 	check.Kafka.Assertion = `result["status"] == "ok"`
 
-	if err := checker.StartConsumer(context.Background(), check); err != nil {
+	if err := checker.Init(context.Background(), &check); err != nil {
 		t.Fatalf("StartConsumer: %v", err)
 	}
-	defer checker.Stop()
+	defer checker.Cleanup(context.Background())
 
 	sendAndWait(t, checker, mock, check.Name, kafka.Message{Value: []byte("not json")})
 
@@ -270,11 +270,11 @@ func TestKafkaChecker_Stop_ClosesReader(t *testing.T) {
 	checker := newMockedKafkaChecker(mock)
 
 	check := kafkaCheck("stop-test", "30s")
-	if err := checker.StartConsumer(context.Background(), check); err != nil {
+	if err := checker.Init(context.Background(), &check); err != nil {
 		t.Fatalf("StartConsumer: %v", err)
-	}
+	} 
 
-	checker.Stop()
+	checker.Cleanup(context.Background())
 
 	// Give the goroutine a moment to react to context cancellation.
 	deadline := time.Now().Add(2 * time.Second)
@@ -294,10 +294,10 @@ func TestKafkaChecker_ConsumerError_DoesNotCrash(t *testing.T) {
 	checker := newMockedKafkaChecker(mock)
 
 	check := kafkaCheck("error-resilience", "30s")
-	if err := checker.StartConsumer(context.Background(), check); err != nil {
+	if err := checker.Init(context.Background(), &check); err != nil {
 		t.Fatalf("StartConsumer: %v", err)
 	}
-	defer checker.Stop()
+	defer checker.Cleanup(context.Background())
 
 	// Inject a transient error; consumer should continue after logging.
 	mock.errCh <- errors.New("simulated broker error")

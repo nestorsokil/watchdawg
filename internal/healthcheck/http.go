@@ -17,6 +17,7 @@ import (
 )
 
 type HTTPChecker struct {
+	NoOpInitializer
 	client   *http.Client
 	logger   *slog.Logger
 	recorder MetricsRecorder
@@ -31,6 +32,8 @@ func NewHTTPChecker(logger *slog.Logger, recorder MetricsRecorder) *HTTPChecker 
 		recorder: recorder,
 	}
 }
+
+func (k *HTTPChecker) IsMatching(check *models.HealthCheck) bool { return check.HTTP != nil }
 
 func (h *HTTPChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
 	return executeWithRetry(ctx, check, h.executeOnce)

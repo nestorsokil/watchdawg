@@ -75,7 +75,7 @@ func NewKafkaChecker(logger *slog.Logger, recorder MetricsRecorder) *KafkaChecke
 
 // StartConsumer registers and launches a background consumer for the given
 // kafka check. The consumer runs until the provided ctx is cancelled or Stop is called.
-func (k *KafkaChecker) StartConsumer(ctx context.Context, check models.HealthCheck) error {
+func (k *KafkaChecker) StartConsumer(ctx context.Context, check *models.HealthCheck) error {
 	interval, err := time.ParseDuration(check.Schedule)
 	if err != nil {
 		// Config validation should have caught this; guard defensively.
@@ -101,7 +101,7 @@ func (k *KafkaChecker) StartConsumer(ctx context.Context, check models.HealthChe
 	)
 
 	go k.runConsumer(consumerCtx, check, state, reader)
-	
+
 	k.recorder.RecordCheckUp(check.Name, true)
 
 	return nil
@@ -109,7 +109,7 @@ func (k *KafkaChecker) StartConsumer(ctx context.Context, check models.HealthChe
 
 // runConsumer wraps consumeMessages with panic recovery. On panic it creates a
 // new reader and restarts itself, unless the context has already been cancelled.
-func (k *KafkaChecker) runConsumer(ctx context.Context, check models.HealthCheck, state *kafkaConsumerState, reader kafkaReader) {
+func (k *KafkaChecker) runConsumer(ctx context.Context, check *models.HealthCheck, state *kafkaConsumerState, reader kafkaReader) {
 	defer func() {
 		if r := recover(); r != nil {
 			k.logger.Error("Kafka consumer panicked, will restart",
@@ -154,6 +154,15 @@ func (k *KafkaChecker) consumeMessages(ctx context.Context, checkName string, re
 		}
 		state.mu.Unlock()
 	}
+}
+
+func (k *KafkaChecker) IsMatching(check *models.HealthCheck) bool { return check.Kafka != nil }
+
+func (k *KafkaChecker) Init(ctx context.Context, check *models.HealthCheck) error {
+	if err := k.StartConsumer(ctx, check); err != nil {
+		return fmt.Errorf("failed to start kafka consumer for check '%s': %w", check.Name, err)
+	}
+	return nil
 }
 
 // Execute evaluates the liveness of the configured Kafka topic.
@@ -236,14 +245,15 @@ func (k *KafkaChecker) Execute(ctx context.Context, check *models.HealthCheck) *
 	return result
 }
 
-// Stop cancels all background consumers.
-func (k *KafkaChecker) Stop() {
+// Cleanup cancels all background consumers.
+func (k *KafkaChecker) Cleanup(ctx context.Context) error {
 	k.mu.RLock()
 	defer k.mu.RUnlock()
 	for name, state := range k.consumers {
 		k.logger.Info("Stopping Kafka consumer", "check", name)
 		state.cancel()
 	}
+	return nil
 }
 
 // validateWithStarlark runs a Starlark assertion against a received Kafka message.

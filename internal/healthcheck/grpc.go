@@ -16,6 +16,7 @@ import (
 )
 
 type GRPCChecker struct {
+	NoOpInitializer
 	logger   *slog.Logger
 	recorder MetricsRecorder
 	// dial is injectable so tests can replace the real dialer with a bufconn-backed one.
@@ -29,6 +30,8 @@ func NewGRPCChecker(logger *slog.Logger, recorder MetricsRecorder) *GRPCChecker 
 		dial:     dialGRPC,
 	}
 }
+
+func (k *GRPCChecker) IsMatching(check *models.HealthCheck) bool { return check.GRPC != nil }
 
 func (g *GRPCChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
 	return executeWithRetry(ctx, check, g.executeOnce)

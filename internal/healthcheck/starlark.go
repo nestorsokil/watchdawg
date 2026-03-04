@@ -14,6 +14,7 @@ import (
 )
 
 type StarlarkChecker struct {
+	NoOpInitializer
 	logger   *slog.Logger
 	recorder MetricsRecorder
 }
@@ -21,6 +22,8 @@ type StarlarkChecker struct {
 func NewStarlarkChecker(logger *slog.Logger, recorder MetricsRecorder) *StarlarkChecker {
 	return &StarlarkChecker{logger: logger, recorder: recorder}
 }
+
+func (k *StarlarkChecker) IsMatching(check *models.HealthCheck) bool { return check.Starlark != nil }
 
 func (s *StarlarkChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
 	return executeWithRetry(ctx, check, s.executeOnce)
