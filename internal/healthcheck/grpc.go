@@ -31,27 +31,7 @@ func NewGRPCChecker(logger *slog.Logger, recorder MetricsRecorder) *GRPCChecker 
 }
 
 func (g *GRPCChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
-	startTime := time.Now()
-
-	var lastResult *models.CheckResult
-	maxAttempts := check.Retries + 1
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result := g.executeOnce(ctx, check, attempt)
-		lastResult = result
-
-		if result.Healthy {
-			result.Duration = time.Since(startTime).Milliseconds()
-			return result
-		}
-
-		if attempt < maxAttempts {
-			time.Sleep(time.Second)
-		}
-	}
-
-	lastResult.Duration = time.Since(startTime).Milliseconds()
-	return lastResult
+	return executeWithRetry(ctx, check, g.executeOnce)
 }
 
 func (g *GRPCChecker) executeOnce(ctx context.Context, check *models.HealthCheck, attempt int) *models.CheckResult {

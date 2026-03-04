@@ -33,27 +33,7 @@ func NewHTTPChecker(logger *slog.Logger, recorder MetricsRecorder) *HTTPChecker 
 }
 
 func (h *HTTPChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
-	startTime := time.Now()
-
-	var lastResult *models.CheckResult
-	maxAttempts := check.Retries + 1 // retries + initial attempt
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result := h.executeOnce(ctx, check, attempt)
-		lastResult = result
-
-		if result.Healthy {
-			result.Duration = time.Since(startTime).Milliseconds()
-			return result
-		}
-
-		if attempt < maxAttempts {
-			time.Sleep(1 * time.Second)
-		}
-	}
-
-	lastResult.Duration = time.Since(startTime).Milliseconds()
-	return lastResult
+	return executeWithRetry(ctx, check, h.executeOnce)
 }
 
 func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck, attempt int) *models.CheckResult {

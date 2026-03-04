@@ -23,27 +23,7 @@ func NewStarlarkChecker(logger *slog.Logger, recorder MetricsRecorder) *Starlark
 }
 
 func (s *StarlarkChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
-	startTime := time.Now()
-
-	var lastResult *models.CheckResult
-	maxAttempts := check.Retries + 1
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result := s.executeOnce(ctx, check, attempt)
-		lastResult = result
-
-		if result.Healthy {
-			result.Duration = time.Since(startTime).Milliseconds()
-			return result
-		}
-
-		if attempt < maxAttempts {
-			time.Sleep(1 * time.Second)
-		}
-	}
-
-	lastResult.Duration = time.Since(startTime).Milliseconds()
-	return lastResult
+	return executeWithRetry(ctx, check, s.executeOnce)
 }
 
 func (s *StarlarkChecker) executeOnce(ctx context.Context, check *models.HealthCheck, attempt int) *models.CheckResult {

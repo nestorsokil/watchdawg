@@ -375,7 +375,6 @@ Grafana will be available at `http://localhost:3000` with the dashboard pre-prov
 ## Roadmap
 
 - [ ] Starlark HTTP client for making requests from scripts
-- [ ] Metrics and monitoring endpoint
 - [ ] Check result history and reporting
 
 ## License
