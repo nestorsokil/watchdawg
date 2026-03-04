@@ -17,10 +17,11 @@ import (
 )
 
 type HTTPChecker struct {
-	NoOpInitializer
-	client   *http.Client
-	logger   *slog.Logger
-	recorder MetricsRecorder
+	noOpInitializer
+	client         *http.Client
+	insecureClient *http.Client
+	logger         *slog.Logger
+	recorder       MetricsRecorder
 }
 
 func NewHTTPChecker(logger *slog.Logger, recorder MetricsRecorder) *HTTPChecker {
@@ -28,12 +29,18 @@ func NewHTTPChecker(logger *slog.Logger, recorder MetricsRecorder) *HTTPChecker 
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		insecureClient: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+		},
 		logger:   logger,
 		recorder: recorder,
 	}
 }
 
-func (k *HTTPChecker) IsMatching(check *models.HealthCheck) bool { return check.HTTP != nil }
+func (h *HTTPChecker) IsMatching(check *models.HealthCheck) bool { return check.HTTP != nil }
 
 func (h *HTTPChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
 	return executeWithRetry(ctx, check, h.executeOnce)
@@ -58,8 +65,8 @@ func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 	req, err := http.NewRequestWithContext(ctx, check.HTTP.Method, check.HTTP.URL, bodyReader)
 	if err != nil {
 		result.Healthy = false
-		result.Error = fmt.Sprintf("failed to create request: %v", err)
-		result.Message = result.Error
+		result.Error = err.Error()
+		result.Message = "failed to create HTTP request"
 		return result
 	}
 
@@ -69,21 +76,14 @@ func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 
 	client := h.client
 	if check.HTTP.Expected.VerifyTLS != nil && !*check.HTTP.Expected.VerifyTLS {
-		client = &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-			},
-		}
+		client = h.insecureClient
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
 		result.Healthy = false
-		result.Error = fmt.Sprintf("request failed: %v", err)
-		result.Message = result.Error
+		result.Error = err.Error()
+		result.Message = "HTTP request failed"
 		return result
 	}
 	defer resp.Body.Close()
@@ -91,8 +91,8 @@ func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		result.Healthy = false
-		result.Error = fmt.Sprintf("failed to read response body: %v", err)
-		result.Message = result.Error
+		result.Error = err.Error()
+		result.Message = "failed to read response body"
 		return result
 	}
 
@@ -144,8 +144,8 @@ func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 		valid, validationMsg, err := h.validateWithStarlark(ctx, check.HTTP.Assertion, check.HTTP.Expected.Format, result.HTTPResult)
 		if err != nil {
 			result.Healthy = false
-			result.Error = fmt.Sprintf("validation script error: %v", err)
-			result.Message = result.Error
+			result.Error = err.Error()
+			result.Message = "assertion script error"
 			bodyPreview := result.HTTPResult.Body
 			if len(bodyPreview) > 500 {
 				bodyPreview = bodyPreview[:500] + "..."

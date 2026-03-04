@@ -16,7 +16,7 @@ import (
 )
 
 type GRPCChecker struct {
-	NoOpInitializer
+	noOpInitializer
 	logger   *slog.Logger
 	recorder MetricsRecorder
 	// dial is injectable so tests can replace the real dialer with a bufconn-backed one.
@@ -31,7 +31,7 @@ func NewGRPCChecker(logger *slog.Logger, recorder MetricsRecorder) *GRPCChecker 
 	}
 }
 
-func (k *GRPCChecker) IsMatching(check *models.HealthCheck) bool { return check.GRPC != nil }
+func (g *GRPCChecker) IsMatching(check *models.HealthCheck) bool { return check.GRPC != nil }
 
 func (g *GRPCChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
 	return executeWithRetry(ctx, check, g.executeOnce)
@@ -51,8 +51,8 @@ func (g *GRPCChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 	conn, err := g.dial(check.GRPC.Target, check.GRPC.PlainText, check.GRPC.VerifyTLS)
 	if err != nil {
 		result.Healthy = false
-		result.Error = fmt.Sprintf("failed to connect to %s: %v", check.GRPC.Target, err)
-		result.Message = result.Error
+		result.Error = err.Error()
+		result.Message = fmt.Sprintf("failed to connect to %s", check.GRPC.Target)
 		return result
 	}
 	defer conn.Close()
@@ -63,8 +63,8 @@ func (g *GRPCChecker) executeOnce(ctx context.Context, check *models.HealthCheck
 	})
 	if err != nil {
 		result.Healthy = false
-		result.Error = fmt.Sprintf("health check RPC failed: %v", err)
-		result.Message = result.Error
+		result.Error = err.Error()
+		result.Message = "gRPC health check RPC failed"
 		return result
 	}
 

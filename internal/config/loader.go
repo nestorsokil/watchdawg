@@ -42,6 +42,18 @@ func Load(path string) (*models.Config, error) {
 	return &config, nil
 }
 
+// countTrue counts how many of the provided boolean flags are true.
+// Used to enforce "exactly one of" constraints on tagged-union config fields.
+func countTrue(flags ...bool) int {
+	n := 0
+	for _, f := range flags {
+		if f {
+			n++
+		}
+	}
+	return n
+}
+
 func validateConfig(config *models.Config) error {
 	if len(config.HealthChecks) == 0 {
 		return fmt.Errorf("no health checks defined")
@@ -56,19 +68,7 @@ func validateConfig(config *models.Config) error {
 			return fmt.Errorf("healthcheck[%d] (%s): schedule is required", i, check.Name)
 		}
 
-		set := 0
-		if check.HTTP != nil {
-			set++
-		}
-		if check.Starlark != nil {
-			set++
-		}
-		if check.Kafka != nil {
-			set++
-		}
-		if check.GRPC != nil {
-			set++
-		}
+		set := countTrue(check.HTTP != nil, check.Starlark != nil, check.Kafka != nil, check.GRPC != nil)
 		if set == 0 {
 			return fmt.Errorf("healthcheck[%d] (%s): exactly one of http/starlark/kafka/grpc must be set", i, check.Name)
 		}
@@ -116,13 +116,15 @@ func validateConfig(config *models.Config) error {
 			config.HealthChecks[i].Timeout = 30 * time.Second
 		}
 
-		for j, h := range check.OnSuccess {
-			if err := validateHookConfig(fmt.Sprintf("healthcheck[%d] (%s) on_success[%d]", i, check.Name, j), h); err != nil {
+		for j := range check.OnSuccess {
+			fieldName := fmt.Sprintf("healthcheck[%d] (%s) on_success[%d]", i, check.Name, j)
+			if err := validateHookConfig(fieldName, &config.HealthChecks[i].OnSuccess[j]); err != nil {
 				return err
 			}
 		}
-		for j, h := range check.OnFailure {
-			if err := validateHookConfig(fmt.Sprintf("healthcheck[%d] (%s) on_failure[%d]", i, check.Name, j), h); err != nil {
+		for j := range check.OnFailure {
+			fieldName := fmt.Sprintf("healthcheck[%d] (%s) on_failure[%d]", i, check.Name, j)
+			if err := validateHookConfig(fieldName, &config.HealthChecks[i].OnFailure[j]); err != nil {
 				return err
 			}
 		}
@@ -150,14 +152,8 @@ func parseDuration(schedule string) (time.Duration, error) {
 	return time.ParseDuration(schedule)
 }
 
-func validateHookConfig(fieldName string, hook models.HookConfig) error {
-	set := 0
-	if hook.HTTP != nil {
-		set++
-	}
-	if hook.Kafka != nil {
-		set++
-	}
+func validateHookConfig(fieldName string, hook *models.HookConfig) error {
+	set := countTrue(hook.HTTP != nil, hook.Kafka != nil)
 	if set == 0 {
 		return fmt.Errorf("%s: must specify exactly one of 'http' or 'kafka'", fieldName)
 	}

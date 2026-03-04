@@ -23,9 +23,12 @@ type kafkaReader interface {
 }
 
 // receivedMessage holds the content of the last consumed Kafka message.
+// Value and Key are stored as strings because all downstream consumers (Starlark
+// assertions, logging) work with strings; converting at store time avoids repeated
+// allocations and keeps the struct consistent with the already-string Headers field.
 type receivedMessage struct {
-	Value   []byte
-	Key     []byte
+	Value   string
+	Key     string
 	Headers map[string]string
 }
 
@@ -246,8 +249,8 @@ func (k *KafkaChecker) consumeMessages(ctx context.Context, checkName string, re
 		state.lastMessageTime = time.Now()
 		state.hasReceivedMessage = true
 		state.lastMessage = &receivedMessage{
-			Value:   msg.Value,
-			Key:     msg.Key,
+			Value:   string(msg.Value),
+			Key:     string(msg.Key),
 			Headers: headers,
 		}
 		state.mu.Unlock()
@@ -262,13 +265,13 @@ func (k *KafkaChecker) validateWithStarlark(ctx context.Context, script string, 
 	}
 
 	globals := starlark.StringDict{
-		"value":   starlark.String(string(msg.Value)),
-		"key":     starlark.String(string(msg.Key)),
+		"value":   starlark.String(msg.Value),
+		"key":     starlark.String(msg.Key),
 		"headers": headersDict,
 	}
 
 	if format != models.ResponseFormatNone {
-		parsedResult, parseErr := starlarkeval.ParseResponseBody(string(msg.Value), format)
+		parsedResult, parseErr := starlarkeval.ParseResponseBody(msg.Value, format)
 		if parseErr != nil {
 			return false, "", fmt.Errorf("failed to parse message value as %s: %w", format, parseErr)
 		}

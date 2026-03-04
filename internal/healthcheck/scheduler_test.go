@@ -58,7 +58,7 @@ func TestParseSchedule_6FieldCronPassthrough(t *testing.T) {
 
 func TestParseSchedule_InvalidDurationPassthrough(t *testing.T) {
 	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
-	// "xs" ends with 's' but time.ParseDuration fails; falls through as-is.
+	// "xs" is not a valid duration and not a recognised cron; passes through as-is.
 	if got := s.parseSchedule("xs"); got != "xs" {
 		t.Fatalf("expected 'xs' passed through unchanged, got %q", got)
 	}
@@ -84,7 +84,7 @@ func TestExecuteHealthCheck_HTTPSuccess(t *testing.T) {
 		Name:    "test",
 		Timeout: 5 * time.Second,
 		HTTP:    &models.HTTPCheckConfig{URL: srv.URL, Method: "GET"},
-	})
+	}, NewHTTPChecker(testLogger(), NoopMetricsRecorder{}))
 	// No panic = pass; observable side-effects are tested via webhook tests below.
 }
 
@@ -96,17 +96,7 @@ func TestExecuteHealthCheck_StarlarkSuccess(t *testing.T) {
 		Starlark: &models.StarlarkCheckConfig{
 			Script: "healthy = True",
 		},
-	})
-}
-
-func TestExecuteHealthCheck_NoSubConfig(t *testing.T) {
-	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
-	// A check with no sub-config should log an error but not panic.
-	// (In practice, config validation prevents this from reaching the scheduler.)
-	s.executeHealthCheck(models.HealthCheck{
-		Name:    "test",
-		Timeout: 5 * time.Second,
-	})
+	}, NewStarlarkChecker(testLogger(), NoopMetricsRecorder{}))
 }
 
 func TestExecuteHealthCheck_SuccessWebhookFired(t *testing.T) {
@@ -128,7 +118,7 @@ func TestExecuteHealthCheck_SuccessWebhookFired(t *testing.T) {
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
 		OnSuccess: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}},
-	})
+	}, NewHTTPChecker(testLogger(), NoopMetricsRecorder{}))
 
 	if n := atomic.LoadInt32(&webhookCalled); n != 1 {
 		t.Fatalf("expected success webhook called once, got %d", n)
@@ -154,7 +144,7 @@ func TestExecuteHealthCheck_FailureWebhookFired(t *testing.T) {
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
 		OnFailure: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}},
-	})
+	}, NewHTTPChecker(testLogger(), NoopMetricsRecorder{}))
 
 	if n := atomic.LoadInt32(&webhookCalled); n != 1 {
 		t.Fatalf("expected failure webhook called once, got %d", n)
@@ -180,7 +170,7 @@ func TestExecuteHealthCheck_SuccessWebhookNotFiredOnFailure(t *testing.T) {
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
 		OnSuccess: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}}, // only success hook
-	})
+	}, NewHTTPChecker(testLogger(), NoopMetricsRecorder{}))
 
 	if n := atomic.LoadInt32(&webhookCalled); n != 0 {
 		t.Fatal("expected success webhook NOT fired when check fails")
@@ -216,7 +206,7 @@ func TestExecuteHealthCheck_MultipleSuccessHooksAllFired(t *testing.T) {
 			{HTTP: &models.WebhookConfig{URL: firstSrv.URL}},
 			{HTTP: &models.WebhookConfig{URL: secondSrv.URL}},
 		},
-	})
+	}, NewHTTPChecker(testLogger(), NoopMetricsRecorder{}))
 
 	if n := atomic.LoadInt32(&firstCalled); n != 1 {
 		t.Fatalf("expected first success hook called once, got %d", n)
@@ -255,7 +245,7 @@ func TestExecuteHealthCheck_MultipleFailureHooksAllFired(t *testing.T) {
 			{HTTP: &models.WebhookConfig{URL: firstSrv.URL}},
 			{HTTP: &models.WebhookConfig{URL: secondSrv.URL}},
 		},
-	})
+	}, NewHTTPChecker(testLogger(), NoopMetricsRecorder{}))
 
 	if n := atomic.LoadInt32(&firstCalled); n != 1 {
 		t.Fatalf("expected first failure hook called once, got %d", n)
@@ -284,7 +274,7 @@ func TestExecuteHealthCheck_FailureWebhookNotFiredOnSuccess(t *testing.T) {
 		Timeout:   5 * time.Second,
 		HTTP:      &models.HTTPCheckConfig{URL: checkSrv.URL, Method: "GET"},
 		OnFailure: []models.HookConfig{{HTTP: &models.WebhookConfig{URL: webhookSrv.URL}}}, // only failure hook
-	})
+	}, NewHTTPChecker(testLogger(), NoopMetricsRecorder{}))
 
 	if n := atomic.LoadInt32(&webhookCalled); n != 0 {
 		t.Fatal("expected failure webhook NOT fired when check succeeds")
