@@ -40,8 +40,6 @@ class PrometheusCounter:
 
     def has_increased(self, by=1):
         current = self._get_current()
-        import logging
-        logging.warning(f"current = {current} value = {self.value}")
         updated = current >= self.value + by
         if updated:
             self.value = current

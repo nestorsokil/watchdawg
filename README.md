@@ -358,6 +358,20 @@ If `body_template` is not provided, the full check result is sent as JSON.
 └── go.mod                      # Go module definition
 ```
 
+## Monitoring
+
+WatchDawg exposes Prometheus metrics at the address configured in the `metrics` block. A pre-built Grafana dashboard is included.
+
+![WatchDawg Grafana Dashboard](monitoring/dashboard.png)
+
+Start the monitoring stack alongside the main service:
+
+```bash
+docker compose up grafana
+```
+
+Grafana will be available at `http://localhost:3000` with the dashboard pre-provisioned (anonymous read access enabled by default).
+
 ## Roadmap
 
 - [ ] Starlark HTTP client for making requests from scripts
