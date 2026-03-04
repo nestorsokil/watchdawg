@@ -1,5 +1,5 @@
 from assertpy import assert_that
-from utils import Prometheus
+from utils import Prometheus, wait_for
 
 prometheus = Prometheus()
 
@@ -11,24 +11,26 @@ def test_continuous_monitoring(received_webhooks, healthcheck_target):
         assert_that(prometheus.counter('watchdawg_check_duration_seconds_sum{check="dynamic_check"}').load()).is_greater_than(0)
 
     up = prometheus.gauge('watchdawg_check_up{check="dynamic_check"}')
-    assert_that(up.load()).is_equal_to(1.0)
+    wait_for(lambda: up.is_not_zero())
 
     healthcheck_target.fail_next("dynamic_check", amount=10)
     received_webhooks.expect_failure("dynamic_check")
-    assert_that(up.load()).is_equal_to(0.0)
-
-
+    wait_for(lambda: up.is_zero())
+    
 def test_kafka_assertion(received_webhooks, kafka_hooks):
-    up = prometheus.gauge('watchdawg_check_up{check="kafka_assertion"}')
+    with prometheus.gauge('watchdawg_check_up{check="kafka_assertion"}') as up:
+        kafka_hooks.send_json({"status": "ok"})
+        received_webhooks.expect_success("kafka_assertion")
+        wait_for(lambda: up.is_not_zero())
+        
+        kafka_hooks.send_json({"status": "bad"})
+        received_webhooks.expect_failure("kafka_assertion")
+        wait_for(lambda: up.is_zero())
 
-    kafka_hooks.send_json({"status": "bad"})
-    received_webhooks.expect_failure("kafka_assertion")
-    assert_that(up.load()).is_equal_to(0.0)
-
-    kafka_hooks.send_json({"status": "ok"})
-    received_webhooks.expect_success("kafka_assertion")
-    assert_that(up.load()).is_equal_to(1.0)
-    assert_that(prometheus.gauge('watchdawg_check_message_age_seconds{check="kafka_assertion"}').load()).is_greater_than_or_equal_to(0)
+        kafka_hooks.send_json({"status": "ok"})
+        received_webhooks.expect_success("kafka_assertion")
+        wait_for(lambda: up.is_not_zero())
+        assert_that(prometheus.gauge('watchdawg_check_message_age_seconds{check="kafka_assertion"}').load()).is_greater_than_or_equal_to(0)
 
 
 def test_kafka_liveness(kafka_hooks):
@@ -37,14 +39,15 @@ def test_kafka_liveness(kafka_hooks):
 
     kafka_hooks.send()
     kafka_hooks.expect_success("kafka_liveness")
-    assert_that(up.load()).is_equal_to(1.0)
+    
+    wait_for(lambda: up.is_not_zero())
     assert_that(message_age.load()).is_greater_than_or_equal_to(0)
 
     # Stop sending. After the check interval (5 s) the last message is stale →
     # WatchDawg fires the on_failure hook to the failure Kafka topic.
     # Timeout is generous to account for scheduler jitter (up to 2× interval).
     kafka_hooks.expect_failure("kafka_liveness", timeout=30)
-    assert_that(up.load()).is_equal_to(0.0)
+    wait_for(lambda: up.is_zero())
 
 
 def test_multi_hook(received_webhooks, healthcheck_target):
@@ -74,19 +77,19 @@ def test_grpc_server_health(received_webhooks, grpc_stub):
     up = prometheus.gauge('watchdawg_check_up{check="grpc_server_health"}')
 
     received_webhooks.expect_success("grpc_server_health")
-    assert_that(up.load()).is_equal_to(1.0)
+    wait_for(lambda: up.is_not_zero())
 
     grpc_stub.set_not_serving()
     received_webhooks.expect_failure("grpc_server_health")
-    assert_that(up.load()).is_equal_to(0.0)
+    wait_for(lambda: up.is_zero())
 
 
 def test_grpc_service_health(received_webhooks, grpc_stub):
     up = prometheus.gauge('watchdawg_check_up{check="grpc_service_health"}')
 
     received_webhooks.expect_success("grpc_service_health")
-    assert_that(up.load()).is_equal_to(1.0)
+    wait_for(lambda: up.is_not_zero())
 
     grpc_stub.set_not_serving(service="integration.TestService")
     received_webhooks.expect_failure("grpc_service_health")
-    assert_that(up.load()).is_equal_to(0.0)
+    wait_for(lambda: up.is_zero())

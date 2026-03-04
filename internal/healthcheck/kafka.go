@@ -101,6 +101,8 @@ func (k *KafkaChecker) StartConsumer(ctx context.Context, check models.HealthChe
 	)
 
 	go k.runConsumer(consumerCtx, check, state, reader)
+	
+	k.recorder.RecordCheckUp(check.Name, true)
 
 	return nil
 }

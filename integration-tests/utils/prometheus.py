@@ -54,5 +54,18 @@ class PrometheusGauge:
         self.prometheus = prometheus
         self.name = name
 
+    def __enter__(self):
+        self.load()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+    
     def load(self):
         return _fetch_value(self.prometheus.url, self.name)
+    
+    def is_zero(self):
+        return self.load() == 0.0
+    
+    def is_not_zero(self):
+        return self.load() > 0
