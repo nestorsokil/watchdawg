@@ -110,10 +110,10 @@ func validateConfig(config *models.Config) error {
 		}
 
 		if check.Retries < 0 {
-			check.Retries = 0
+			config.HealthChecks[i].Retries = 0
 		}
 		if check.Timeout == 0 {
-			check.Timeout = 30 * 1000000000 // 30 seconds in nanoseconds
+			config.HealthChecks[i].Timeout = 30 * time.Second
 		}
 
 		for j, h := range check.OnSuccess {
