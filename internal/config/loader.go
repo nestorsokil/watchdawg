@@ -128,6 +128,18 @@ func validateConfig(config *models.Config) error {
 		}
 	}
 
+	if config.Metrics != nil {
+		if config.Metrics.Address == "" {
+			return fmt.Errorf("metrics.address is required")
+		}
+		if config.Metrics.Type == "" {
+			config.Metrics.Type = "prometheus"
+		}
+		if config.Metrics.Type != "prometheus" {
+			return fmt.Errorf("metrics.type %q is not supported; only \"prometheus\" is supported", config.Metrics.Type)
+		}
+	}
+
 	return nil
 }
 

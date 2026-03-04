@@ -70,7 +70,7 @@ func TestGRPCChecker_ServerLevel_Serving(t *testing.T) {
 	healthSrv, dial := startHealthServer(t)
 	healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 
-	checker := &GRPCChecker{logger: slog.Default(), dial: dial}
+	checker := &GRPCChecker{logger: slog.Default(), recorder: NoopMetricsRecorder{}, dial: dial}
 	result := checker.Execute(context.Background(), newTestGRPCCheck(""))
 
 	if !result.Healthy {
@@ -88,7 +88,7 @@ func TestGRPCChecker_ServerLevel_NotServing(t *testing.T) {
 	healthSrv, dial := startHealthServer(t)
 	healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
 
-	checker := &GRPCChecker{logger: slog.Default(), dial: dial}
+	checker := &GRPCChecker{logger: slog.Default(), recorder: NoopMetricsRecorder{}, dial: dial}
 	result := checker.Execute(context.Background(), newTestGRPCCheck(""))
 
 	if result.Healthy {
@@ -103,7 +103,7 @@ func TestGRPCChecker_NamedService_Serving(t *testing.T) {
 	healthSrv, dial := startHealthServer(t)
 	healthSrv.SetServingStatus("my.package.MyService", grpc_health_v1.HealthCheckResponse_SERVING)
 
-	checker := &GRPCChecker{logger: slog.Default(), dial: dial}
+	checker := &GRPCChecker{logger: slog.Default(), recorder: NoopMetricsRecorder{}, dial: dial}
 	result := checker.Execute(context.Background(), newTestGRPCCheck("my.package.MyService"))
 
 	if !result.Healthy {
@@ -115,7 +115,7 @@ func TestGRPCChecker_NamedService_Unknown(t *testing.T) {
 	_, dial := startHealthServer(t)
 	// Service not registered → grpc health returns SERVICE_UNKNOWN
 
-	checker := &GRPCChecker{logger: slog.Default(), dial: dial}
+	checker := &GRPCChecker{logger: slog.Default(), recorder: NoopMetricsRecorder{}, dial: dial}
 	result := checker.Execute(context.Background(), newTestGRPCCheck("not.registered.Service"))
 
 	if result.Healthy {
@@ -129,7 +129,7 @@ func TestGRPCChecker_ConnectionFailure(t *testing.T) {
 		return grpc.NewClient("localhost:1", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	checker := &GRPCChecker{logger: slog.Default(), dial: dial}
+	checker := &GRPCChecker{logger: slog.Default(), recorder: NoopMetricsRecorder{}, dial: dial}
 	check := newTestGRPCCheck("")
 	check.Timeout = 500 * time.Millisecond
 
@@ -153,7 +153,7 @@ func TestGRPCChecker_RetrySucceeds(t *testing.T) {
 		healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 	}()
 
-	checker := &GRPCChecker{logger: slog.Default(), dial: dial}
+	checker := &GRPCChecker{logger: slog.Default(), recorder: NoopMetricsRecorder{}, dial: dial}
 	check := newTestGRPCCheck("")
 	check.Retries = 2
 
@@ -171,7 +171,7 @@ func TestGRPCChecker_MessageContainsServiceName(t *testing.T) {
 	healthSrv, dial := startHealthServer(t)
 	healthSrv.SetServingStatus("svc.MyService", grpc_health_v1.HealthCheckResponse_SERVING)
 
-	checker := &GRPCChecker{logger: slog.Default(), dial: dial}
+	checker := &GRPCChecker{logger: slog.Default(), recorder: NoopMetricsRecorder{}, dial: dial}
 	result := checker.Execute(context.Background(), newTestGRPCCheck("svc.MyService"))
 
 	if !result.Healthy {

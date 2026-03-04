@@ -14,11 +14,12 @@ import (
 )
 
 type StarlarkChecker struct {
-	logger *slog.Logger
+	logger   *slog.Logger
+	recorder MetricsRecorder
 }
 
-func NewStarlarkChecker(logger *slog.Logger) *StarlarkChecker {
-	return &StarlarkChecker{logger: logger}
+func NewStarlarkChecker(logger *slog.Logger, recorder MetricsRecorder) *StarlarkChecker {
+	return &StarlarkChecker{logger: logger, recorder: recorder}
 }
 
 func (s *StarlarkChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
@@ -46,11 +47,15 @@ func (s *StarlarkChecker) Execute(ctx context.Context, check *models.HealthCheck
 }
 
 func (s *StarlarkChecker) executeOnce(ctx context.Context, check *models.HealthCheck, attempt int) *models.CheckResult {
+	attemptStart := time.Now()
 	result := &models.CheckResult{
 		CheckName: check.Name,
-		Timestamp: time.Now(),
+		Timestamp: attemptStart,
 		Attempt:   attempt,
 	}
+	defer func() {
+		s.recorder.RecordCheckAttempt(check.Name, result.Healthy, time.Since(attemptStart).Seconds())
+	}()
 
 	globals := s.buildGlobals(check)
 

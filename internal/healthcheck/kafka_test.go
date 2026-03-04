@@ -58,6 +58,7 @@ func newMockedKafkaChecker(mock *mockKafkaReader) *KafkaChecker {
 	return &KafkaChecker{
 		consumers: make(map[string]*kafkaConsumerState),
 		logger:    testLogger(),
+		recorder:  NoopMetricsRecorder{},
 		newReader: func(brokers []string, topic, groupID string) kafkaReader {
 			return mock
 		},

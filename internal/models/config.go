@@ -8,7 +8,14 @@ import (
 )
 
 type Config struct {
-	HealthChecks []HealthCheck `json:"healthchecks"`
+	Metrics      *MetricsConfig `json:"metrics,omitempty"`
+	HealthChecks []HealthCheck  `json:"healthchecks"`
+}
+
+type MetricsConfig struct {
+	// Type is the metrics exposition format. Only "prometheus" is supported; defaults to "prometheus".
+	Type    string `json:"type"`
+	Address string `json:"address"` // host:port to bind the metrics HTTP server
 }
 
 type HealthCheck struct {

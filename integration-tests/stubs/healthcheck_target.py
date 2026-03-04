@@ -4,30 +4,27 @@ from flask import Flask
 app = Flask(__name__)
 
 _lock = threading.Lock()
-_fail_count = 0
+_fail_counts: dict[str, int] = {}
+
 
 class HealthcheckTarget:
-    def fail_next(self, amount=1):
-        global _fail_count
+    def fail_next(self, check_name: str, amount: int = 1):
         with _lock:
-            _fail_count += amount
+            _fail_counts[check_name] = _fail_counts.get(check_name, 0) + amount
 
 
-
-@app.route("/target/health", methods=["GET"])
-def health():
-    global _fail_count
+@app.route("/target/health/<check_name>", methods=["GET"])
+def health(check_name):
     with _lock:
-        if _fail_count > 0:
-            _fail_count -= 1
+        if _fail_counts.get(check_name, 0) > 0:
+            _fail_counts[check_name] -= 1
             return "Service Unavailable", 503
-    return "OK", 200    
+    return "OK", 200
 
 
 def reset():
-        global _fail_count
-        with _lock:
-            _fail_count = 0
+    with _lock:
+        _fail_counts.clear()
 
 
 def main():

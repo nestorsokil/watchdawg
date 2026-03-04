@@ -13,14 +13,14 @@ import (
 // ── parseSchedule ─────────────────────────────────────────────────────────────
 
 func TestParseSchedule_SubMinuteSeconds(t *testing.T) {
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	if got := s.parseSchedule("10s"); got != "*/10 * * * * *" {
 		t.Fatalf("expected '*/10 * * * * *', got %q", got)
 	}
 }
 
 func TestParseSchedule_ExactMinuteInSeconds(t *testing.T) {
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	// 60s = 1 minute, so minutes path: "0 */1 * * * *"
 	if got := s.parseSchedule("60s"); got != "0 */1 * * * *" {
 		t.Fatalf("expected '0 */1 * * * *', got %q", got)
@@ -28,28 +28,28 @@ func TestParseSchedule_ExactMinuteInSeconds(t *testing.T) {
 }
 
 func TestParseSchedule_Minutes(t *testing.T) {
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	if got := s.parseSchedule("5m"); got != "0 */5 * * * *" {
 		t.Fatalf("expected '0 */5 * * * *', got %q", got)
 	}
 }
 
 func TestParseSchedule_Hours(t *testing.T) {
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	if got := s.parseSchedule("2h"); got != "0 0 */2 * * *" {
 		t.Fatalf("expected '0 0 */2 * * *', got %q", got)
 	}
 }
 
 func TestParseSchedule_StandardCron5Field(t *testing.T) {
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	if got := s.parseSchedule("*/5 * * * *"); got != "0 */5 * * * *" {
 		t.Fatalf("expected '0 */5 * * * *', got %q", got)
 	}
 }
 
 func TestParseSchedule_6FieldCronPassthrough(t *testing.T) {
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	input := "0 */5 * * * *"
 	if got := s.parseSchedule(input); got != input {
 		t.Fatalf("expected %q unchanged, got %q", input, got)
@@ -57,7 +57,7 @@ func TestParseSchedule_6FieldCronPassthrough(t *testing.T) {
 }
 
 func TestParseSchedule_InvalidDurationPassthrough(t *testing.T) {
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	// "xs" ends with 's' but time.ParseDuration fails; falls through as-is.
 	if got := s.parseSchedule("xs"); got != "xs" {
 		t.Fatalf("expected 'xs' passed through unchanged, got %q", got)
@@ -65,7 +65,7 @@ func TestParseSchedule_InvalidDurationPassthrough(t *testing.T) {
 }
 
 func TestParseSchedule_WhitespaceTrimmed(t *testing.T) {
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	if got := s.parseSchedule("  30s  "); got != "*/30 * * * * *" {
 		t.Fatalf("expected '*/30 * * * * *' after trimming whitespace, got %q", got)
 	}
@@ -79,7 +79,7 @@ func TestExecuteHealthCheck_HTTPSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	s.executeHealthCheck(models.HealthCheck{
 		Name:    "test",
 		Timeout: 5 * time.Second,
@@ -89,7 +89,7 @@ func TestExecuteHealthCheck_HTTPSuccess(t *testing.T) {
 }
 
 func TestExecuteHealthCheck_StarlarkSuccess(t *testing.T) {
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	s.executeHealthCheck(models.HealthCheck{
 		Name:    "test",
 		Timeout: 5 * time.Second,
@@ -100,7 +100,7 @@ func TestExecuteHealthCheck_StarlarkSuccess(t *testing.T) {
 }
 
 func TestExecuteHealthCheck_NoSubConfig(t *testing.T) {
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	// A check with no sub-config should log an error but not panic.
 	// (In practice, config validation prevents this from reaching the scheduler.)
 	s.executeHealthCheck(models.HealthCheck{
@@ -122,7 +122,7 @@ func TestExecuteHealthCheck_SuccessWebhookFired(t *testing.T) {
 	}))
 	defer checkSrv.Close()
 
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	s.executeHealthCheck(models.HealthCheck{
 		Name:      "test",
 		Timeout:   5 * time.Second,
@@ -148,7 +148,7 @@ func TestExecuteHealthCheck_FailureWebhookFired(t *testing.T) {
 	}))
 	defer checkSrv.Close()
 
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	s.executeHealthCheck(models.HealthCheck{
 		Name:      "test",
 		Timeout:   5 * time.Second,
@@ -174,7 +174,7 @@ func TestExecuteHealthCheck_SuccessWebhookNotFiredOnFailure(t *testing.T) {
 	}))
 	defer checkSrv.Close()
 
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	s.executeHealthCheck(models.HealthCheck{
 		Name:      "test",
 		Timeout:   5 * time.Second,
@@ -207,7 +207,7 @@ func TestExecuteHealthCheck_MultipleSuccessHooksAllFired(t *testing.T) {
 	}))
 	defer checkSrv.Close()
 
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	s.executeHealthCheck(models.HealthCheck{
 		Name:    "test",
 		Timeout: 5 * time.Second,
@@ -246,7 +246,7 @@ func TestExecuteHealthCheck_MultipleFailureHooksAllFired(t *testing.T) {
 	}))
 	defer checkSrv.Close()
 
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	s.executeHealthCheck(models.HealthCheck{
 		Name:    "test",
 		Timeout: 5 * time.Second,
@@ -278,7 +278,7 @@ func TestExecuteHealthCheck_FailureWebhookNotFiredOnSuccess(t *testing.T) {
 	}))
 	defer checkSrv.Close()
 
-	s := NewScheduler(testLogger())
+	s := NewScheduler(testLogger(), NoopMetricsRecorder{})
 	s.executeHealthCheck(models.HealthCheck{
 		Name:      "test",
 		Timeout:   5 * time.Second,

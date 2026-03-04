@@ -19,43 +19,64 @@ type HookNotifier struct {
 	client         *http.Client
 	kafkaPublisher *KafkaPublisher
 	logger         *slog.Logger
+	recorder       MetricsRecorder
 }
 
-func NewHookNotifier(logger *slog.Logger) *HookNotifier {
+func NewHookNotifier(logger *slog.Logger, recorder MetricsRecorder) *HookNotifier {
 	return &HookNotifier{
 		client:         &http.Client{Timeout: 10 * time.Second},
 		kafkaPublisher: NewKafkaPublisher(),
 		logger:         logger,
+		recorder:       recorder,
 	}
 }
 
 func (n *HookNotifier) NotifySuccess(ctx context.Context, hooks []models.HookConfig, result *models.CheckResult) error {
-	return n.executeHooks(ctx, hooks, result)
+	return n.executeHooks(ctx, hooks, result, "on_success")
 }
 
 func (n *HookNotifier) NotifyFailure(ctx context.Context, hooks []models.HookConfig, result *models.CheckResult) error {
-	return n.executeHooks(ctx, hooks, result)
+	return n.executeHooks(ctx, hooks, result, "on_failure")
 }
 
-func (n *HookNotifier) executeHooks(ctx context.Context, hooks []models.HookConfig, result *models.CheckResult) error {
-    var (
-        wg   sync.WaitGroup
-        mu   sync.Mutex
-        errs []error
-    )
-    for _, hook := range hooks {
-        wg.Add(1)
-        go func() {
-            defer wg.Done()
-            if err := n.executeHook(ctx, hook, result); err != nil {
-                mu.Lock()
-                errs = append(errs, err)
-                mu.Unlock()
-            }
-        }()
-    }
-    wg.Wait()
-    return errors.Join(errs...)
+func (n *HookNotifier) executeHooks(ctx context.Context, hooks []models.HookConfig, result *models.CheckResult, trigger string) error {
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		errs []error
+	)
+	for _, hook := range hooks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			hookType, target := hookTypeAndTarget(hook)
+			start := time.Now()
+			err := n.executeHook(ctx, hook, result)
+			durationSec := time.Since(start).Seconds()
+			hookResult := "success"
+			if err != nil {
+				hookResult = "failure"
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+			}
+			n.recorder.RecordHookExecution(result.CheckName, hookType, target, trigger, hookResult)
+			n.recorder.RecordHookDuration(result.CheckName, hookType, target, trigger, durationSec)
+		}()
+	}
+	wg.Wait()
+	return errors.Join(errs...)
+}
+
+func hookTypeAndTarget(hook models.HookConfig) (hookType, target string) {
+	switch {
+	case hook.HTTP != nil:
+		return "http", hook.HTTP.URL
+	case hook.Kafka != nil:
+		return "kafka", hook.Kafka.Topic
+	default:
+		return "unknown", ""
+	}
 }
 
 func (n *HookNotifier) executeHook(ctx context.Context, hook models.HookConfig, result *models.CheckResult) error {

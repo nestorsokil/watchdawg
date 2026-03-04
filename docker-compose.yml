@@ -44,6 +44,8 @@ services:
     command: ["-config", "/configs/config.integration.json"]
     volumes:
       - ./configs:/configs
+    ports:
+      - "9091:9091"
     depends_on:
       kafka:
         condition: service_healthy

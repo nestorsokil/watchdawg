@@ -17,16 +17,18 @@ import (
 )
 
 type HTTPChecker struct {
-	client *http.Client
-	logger *slog.Logger
+	client   *http.Client
+	logger   *slog.Logger
+	recorder MetricsRecorder
 }
 
-func NewHTTPChecker(logger *slog.Logger) *HTTPChecker {
+func NewHTTPChecker(logger *slog.Logger, recorder MetricsRecorder) *HTTPChecker {
 	return &HTTPChecker{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		logger: logger,
+		logger:   logger,
+		recorder: recorder,
 	}
 }
 
@@ -55,11 +57,15 @@ func (h *HTTPChecker) Execute(ctx context.Context, check *models.HealthCheck) *m
 }
 
 func (h *HTTPChecker) executeOnce(ctx context.Context, check *models.HealthCheck, attempt int) *models.CheckResult {
+	attemptStart := time.Now()
 	result := &models.CheckResult{
 		CheckName: check.Name,
-		Timestamp: time.Now(),
+		Timestamp: attemptStart,
 		Attempt:   attempt,
 	}
+	defer func() {
+		h.recorder.RecordCheckAttempt(check.Name, result.Healthy, time.Since(attemptStart).Seconds())
+	}()
 
 	var bodyReader io.Reader
 	if check.HTTP.Body != "" {

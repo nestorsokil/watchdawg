@@ -50,14 +50,16 @@ type KafkaChecker struct {
 	consumers map[string]*kafkaConsumerState
 	mu        sync.RWMutex
 	logger    *slog.Logger
+	recorder  MetricsRecorder
 	// newReader is injectable so tests can replace the real kafka.Reader.
 	newReader func(brokers []string, topic, groupID string) kafkaReader
 }
 
-func NewKafkaChecker(logger *slog.Logger) *KafkaChecker {
+func NewKafkaChecker(logger *slog.Logger, recorder MetricsRecorder) *KafkaChecker {
 	return &KafkaChecker{
 		consumers: make(map[string]*kafkaConsumerState),
 		logger:    logger,
+		recorder:  recorder,
 		newReader: func(brokers []string, topic, groupID string) kafkaReader {
 			return kafka.NewReader(kafka.ReaderConfig{
 				Brokers:     brokers,
@@ -165,7 +167,6 @@ func (k *KafkaChecker) Execute(ctx context.Context, check *models.HealthCheck) *
 		Timestamp: startTime,
 		Attempt:   1,
 	}
-
 	k.mu.RLock()
 	state, ok := k.consumers[check.Name]
 	k.mu.RUnlock()
@@ -195,6 +196,7 @@ func (k *KafkaChecker) Execute(ctx context.Context, check *models.HealthCheck) *
 	}
 
 	age := time.Since(state.lastMessageTime)
+	k.recorder.RecordMessageAge(check.Name, age.Seconds())
 	if age > state.expectedInterval {
 		result.Healthy = false
 		result.Message = fmt.Sprintf("no message on topic '%s' for %v (expected at least every %v)",

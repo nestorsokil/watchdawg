@@ -16,15 +16,17 @@ import (
 )
 
 type GRPCChecker struct {
-	logger *slog.Logger
+	logger   *slog.Logger
+	recorder MetricsRecorder
 	// dial is injectable so tests can replace the real dialer with a bufconn-backed one.
 	dial func(target string, plainText bool, verifyTLS *bool) (*grpc.ClientConn, error)
 }
 
-func NewGRPCChecker(logger *slog.Logger) *GRPCChecker {
+func NewGRPCChecker(logger *slog.Logger, recorder MetricsRecorder) *GRPCChecker {
 	return &GRPCChecker{
-		logger: logger,
-		dial:   dialGRPC,
+		logger:   logger,
+		recorder: recorder,
+		dial:     dialGRPC,
 	}
 }
 
@@ -53,11 +55,15 @@ func (g *GRPCChecker) Execute(ctx context.Context, check *models.HealthCheck) *m
 }
 
 func (g *GRPCChecker) executeOnce(ctx context.Context, check *models.HealthCheck, attempt int) *models.CheckResult {
+	attemptStart := time.Now()
 	result := &models.CheckResult{
 		CheckName: check.Name,
-		Timestamp: time.Now(),
+		Timestamp: attemptStart,
 		Attempt:   attempt,
 	}
+	defer func() {
+		g.recorder.RecordCheckAttempt(check.Name, result.Healthy, time.Since(attemptStart).Seconds())
+	}()
 
 	conn, err := g.dial(check.GRPC.Target, check.GRPC.PlainText, check.GRPC.VerifyTLS)
 	if err != nil {

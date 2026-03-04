@@ -36,13 +36,14 @@ type Scheduler struct {
 	kafkaChecker    *KafkaChecker
 	grpcChecker     *GRPCChecker
 	notifier        *HookNotifier
+	recorder        MetricsRecorder
 	logger          *slog.Logger
 	// rootCtx is cancelled in Stop to signal background workers (e.g. Kafka consumers).
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
 }
 
-func NewScheduler(logger *slog.Logger) *Scheduler {
+func NewScheduler(logger *slog.Logger, recorder MetricsRecorder) *Scheduler {
 	adapter := cronSlogAdapter{logger: logger}
 	rootCtx, rootCancel := context.WithCancel(context.Background())
 	return &Scheduler{
@@ -51,11 +52,12 @@ func NewScheduler(logger *slog.Logger) *Scheduler {
 			cron.WithChain(cron.Recover(adapter)),
 			cron.WithLogger(adapter),
 		),
-		httpChecker:     NewHTTPChecker(logger),
-		starlarkChecker: NewStarlarkChecker(logger),
-		kafkaChecker:    NewKafkaChecker(logger),
-		grpcChecker:     NewGRPCChecker(logger),
-		notifier:        NewHookNotifier(logger),
+		httpChecker:     NewHTTPChecker(logger, recorder),
+		starlarkChecker: NewStarlarkChecker(logger, recorder),
+		kafkaChecker:    NewKafkaChecker(logger, recorder),
+		grpcChecker:     NewGRPCChecker(logger, recorder),
+		notifier:        NewHookNotifier(logger, recorder),
+		recorder:        recorder,
 		logger:          logger,
 		rootCtx:         rootCtx,
 		rootCancel:      rootCancel,
@@ -149,6 +151,8 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
 		s.logger.Error("Check has no recognizable sub-config; skipping", "check", check.Name)
 		return
 	}
+
+	s.recorder.RecordCheckUp(check.Name, result.Healthy)
 
 	if result.Healthy {
 		s.logger.Info("Health check passed",

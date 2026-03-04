@@ -1,4 +1,7 @@
 {
+  "metrics": {
+    "address": ":9091"
+  },
   "healthchecks": [
     {
       "name": "dynamic_check",
@@ -6,7 +9,7 @@
       "retries": 0,
       "timeout": 2000000000,
       "http": {
-        "url": "http://integration-tests:8080/target/health",
+        "url": "http://integration-tests:8080/target/health/dynamic_check",
         "method": "GET"
       },
       "on_success": [
@@ -32,7 +35,7 @@
       "retries": 0,
       "timeout": 2000000000,
       "http": {
-        "url": "http://integration-tests:8080/target/health",
+        "url": "http://integration-tests:8080/target/health/multi_hook_check",
         "method": "GET"
       },
       "on_success": [
