@@ -124,9 +124,9 @@ func IsSimpleExpression(script string) bool {
 	return true
 }
 
-// GoToStarlark converts an arbitrary Go value (as produced by json.Unmarshal
-// into interface{}) to its Starlark equivalent. Unknown types are stringified.
-func GoToStarlark(v interface{}) starlark.Value {
+// toStarlark is the shared conversion core. onUnknown determines what Starlark
+// value is returned for types that have no natural mapping (e.g. structs).
+func toStarlark(v interface{}, onUnknown func(interface{}) starlark.Value) starlark.Value {
 	switch val := v.(type) {
 	case nil:
 		return starlark.None
@@ -141,51 +141,38 @@ func GoToStarlark(v interface{}) starlark.Value {
 	case string:
 		return starlark.String(val)
 	case []interface{}:
-		list := &starlark.List{}
-		for _, item := range val {
-			list.Append(GoToStarlark(item))
+		elems := make([]starlark.Value, len(val))
+		for i, item := range val {
+			elems[i] = toStarlark(item, onUnknown)
 		}
-		return list
+		return starlark.NewList(elems)
 	case map[string]interface{}:
 		dict := starlark.NewDict(len(val))
 		for key, value := range val {
-			dict.SetKey(starlark.String(key), GoToStarlark(value))
+			dict.SetKey(starlark.String(key), toStarlark(value, onUnknown))
 		}
 		return dict
 	default:
-		return starlark.String(fmt.Sprintf("%v", val))
+		return onUnknown(v)
 	}
 }
 
+// GoToStarlark converts an arbitrary Go value (as produced by json.Unmarshal
+// into interface{}) to its Starlark equivalent. Unknown types are stringified
+// so that no information from a parsed response body is silently dropped.
+func GoToStarlark(v interface{}) starlark.Value {
+	return toStarlark(v, func(v interface{}) starlark.Value {
+		return starlark.String(fmt.Sprintf("%v", v))
+	})
+}
+
 // ToStarlarkValue converts a user-provided Go value (from the config globals
-// map) to its Starlark equivalent. Unknown types map to starlark.None.
+// map) to its Starlark equivalent. Unknown types map to starlark.None because
+// config values are expected to be well-typed primitives or collections.
 func ToStarlarkValue(v interface{}) starlark.Value {
-	switch val := v.(type) {
-	case string:
-		return starlark.String(val)
-	case int:
-		return starlark.MakeInt(val)
-	case int64:
-		return starlark.MakeInt64(val)
-	case float64:
-		return starlark.Float(val)
-	case bool:
-		return starlark.Bool(val)
-	case map[string]interface{}:
-		dict := &starlark.Dict{}
-		for k, v := range val {
-			dict.SetKey(starlark.String(k), ToStarlarkValue(v))
-		}
-		return dict
-	case []interface{}:
-		var elems []starlark.Value
-		for _, elem := range val {
-			elems = append(elems, ToStarlarkValue(elem))
-		}
-		return starlark.NewList(elems)
-	default:
+	return toStarlark(v, func(interface{}) starlark.Value {
 		return starlark.None
-	}
+	})
 }
 
 // ParseResponseBody parses a raw string body into a Starlark value according to

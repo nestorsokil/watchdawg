@@ -73,9 +73,13 @@ func NewKafkaChecker(logger *slog.Logger, recorder MetricsRecorder) *KafkaChecke
 	}
 }
 
-// StartConsumer registers and launches a background consumer for the given
-// kafka check. The consumer runs until the provided ctx is cancelled or Stop is called.
-func (k *KafkaChecker) StartConsumer(ctx context.Context, check *models.HealthCheck) error {
+func (k *KafkaChecker) IsMatching(check *models.HealthCheck) bool { 
+	return check.Kafka != nil 
+}
+
+// Init registers and launches a background consumer for the given
+// kafka check. The consumer runs until the provided ctx is cancelled or Cleanup is called.
+func (k *KafkaChecker) Init(ctx context.Context, check *models.HealthCheck) error {
 	interval, err := time.ParseDuration(check.Schedule)
 	if err != nil {
 		// Config validation should have caught this; guard defensively.
@@ -104,64 +108,6 @@ func (k *KafkaChecker) StartConsumer(ctx context.Context, check *models.HealthCh
 
 	k.recorder.RecordCheckUp(check.Name, true)
 
-	return nil
-}
-
-// runConsumer wraps consumeMessages with panic recovery. On panic it creates a
-// new reader and restarts itself, unless the context has already been cancelled.
-func (k *KafkaChecker) runConsumer(ctx context.Context, check *models.HealthCheck, state *kafkaConsumerState, reader kafkaReader) {
-	defer func() {
-		if r := recover(); r != nil {
-			k.logger.Error("Kafka consumer panicked, will restart",
-				"check", check.Name,
-				"panic", r,
-			)
-			if ctx.Err() == nil {
-				newReader := k.newReader(check.Kafka.Brokers, check.Kafka.Topic, check.Kafka.GroupID)
-				go k.runConsumer(ctx, check, state, newReader)
-			}
-		}
-	}()
-	k.consumeMessages(ctx, check.Name, reader, state)
-}
-
-func (k *KafkaChecker) consumeMessages(ctx context.Context, checkName string, reader kafkaReader, state *kafkaConsumerState) {
-	defer reader.Close()
-
-	for {
-		msg, err := reader.FetchMessage(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				k.logger.Info("Kafka consumer stopped", "check", checkName)
-				return
-			}
-			k.logger.Warn("Kafka consumer error, will retry", "check", checkName, "error", err)
-			continue
-		}
-
-		headers := make(map[string]string, len(msg.Headers))
-		for _, h := range msg.Headers {
-			headers[h.Key] = string(h.Value)
-		}
-
-		state.mu.Lock()
-		state.lastMessageTime = time.Now()
-		state.hasReceivedMessage = true
-		state.lastMessage = &receivedMessage{
-			Value:   msg.Value,
-			Key:     msg.Key,
-			Headers: headers,
-		}
-		state.mu.Unlock()
-	}
-}
-
-func (k *KafkaChecker) IsMatching(check *models.HealthCheck) bool { return check.Kafka != nil }
-
-func (k *KafkaChecker) Init(ctx context.Context, check *models.HealthCheck) error {
-	if err := k.StartConsumer(ctx, check); err != nil {
-		return fmt.Errorf("failed to start kafka consumer for check '%s': %w", check.Name, err)
-	}
 	return nil
 }
 
@@ -254,6 +200,55 @@ func (k *KafkaChecker) Cleanup(ctx context.Context) error {
 		state.cancel()
 	}
 	return nil
+}
+
+// runConsumer wraps consumeMessages with panic recovery. On panic it creates a
+// new reader and restarts itself, unless the context has already been cancelled.
+func (k *KafkaChecker) runConsumer(ctx context.Context, check *models.HealthCheck, state *kafkaConsumerState, reader kafkaReader) {
+	defer func() {
+		if r := recover(); r != nil {
+			k.logger.Error("Kafka consumer panicked, will restart",
+				"check", check.Name,
+				"panic", r,
+			)
+			if ctx.Err() == nil {
+				newReader := k.newReader(check.Kafka.Brokers, check.Kafka.Topic, check.Kafka.GroupID)
+				go k.runConsumer(ctx, check, state, newReader)
+			}
+		}
+	}()
+	k.consumeMessages(ctx, check.Name, reader, state)
+}
+
+func (k *KafkaChecker) consumeMessages(ctx context.Context, checkName string, reader kafkaReader, state *kafkaConsumerState) {
+	defer reader.Close()
+
+	for {
+		msg, err := reader.FetchMessage(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				k.logger.Info("Kafka consumer stopped", "check", checkName)
+				return
+			}
+			k.logger.Warn("Kafka consumer error, will retry", "check", checkName, "error", err)
+			continue
+		}
+
+		headers := make(map[string]string, len(msg.Headers))
+		for _, h := range msg.Headers {
+			headers[h.Key] = string(h.Value)
+		}
+
+		state.mu.Lock()
+		state.lastMessageTime = time.Now()
+		state.hasReceivedMessage = true
+		state.lastMessage = &receivedMessage{
+			Value:   msg.Value,
+			Key:     msg.Key,
+			Headers: headers,
+		}
+		state.mu.Unlock()
+	}
 }
 
 // validateWithStarlark runs a Starlark assertion against a received Kafka message.
