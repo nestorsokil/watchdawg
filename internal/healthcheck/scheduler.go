@@ -114,6 +114,7 @@ func (s *Scheduler) Stop() {
 			s.logger.Error(fmt.Sprintf("Failed cleanup on checker %T: %v", check, err))
 		}
 	}
+	s.notifier.Close()
 	s.logger.Info("Scheduler stopped")
 }
 

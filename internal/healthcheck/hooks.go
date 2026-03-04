@@ -31,6 +31,10 @@ func NewHookNotifier(logger *slog.Logger, recorder MetricsRecorder) *HookNotifie
 	}
 }
 
+func (n *HookNotifier) Close() {
+	n.kafkaPublisher.Close()
+}
+
 func (n *HookNotifier) NotifySuccess(ctx context.Context, hooks []models.HookConfig, result *models.CheckResult) error {
 	return n.executeHooks(ctx, hooks, result, "on_success")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,6 +138,8 @@ func (k *KafkaChecker) Execute(ctx context.Context, check *models.HealthCheck) *
 	}
 
 	state.mu.RLock()
+	hasReceived := state.hasReceivedMessage
+	lastMsgTime := state.lastMessageTime
 	var lastMsg *receivedMessage
 	if state.lastMessage != nil {
 		msgCopy := *state.lastMessage
@@ -145,14 +148,14 @@ func (k *KafkaChecker) Execute(ctx context.Context, check *models.HealthCheck) *
 	state.mu.RUnlock()
 
 	// No messages yet: report healthy while waiting for the producer to start.
-	if !state.hasReceivedMessage {
+	if !hasReceived {
 		result.Healthy = true
 		result.Message = fmt.Sprintf("waiting for first message on topic '%s'", check.Kafka.Topic)
 		result.Duration = time.Since(startTime).Milliseconds()
 		return result
 	}
 
-	age := time.Since(state.lastMessageTime)
+	age := time.Since(lastMsgTime)
 	k.recorder.RecordMessageAge(check.Name, age.Seconds())
 	if age > state.expectedInterval {
 		result.Healthy = false
@@ -277,18 +280,46 @@ func (k *KafkaChecker) validateWithStarlark(ctx context.Context, script string, 
 
 // KafkaPublisher publishes messages to Kafka topics. It is co-located with the
 // consumer so all Kafka I/O lives in one file.
-type KafkaPublisher struct{}
+//
+// Writers are pooled by (brokers, topic) so that TCP connections are reused
+// across hook invocations. Call Close when the publisher is no longer needed.
+type KafkaPublisher struct {
+	mu      sync.Mutex
+	writers map[string]*kafka.Writer
+}
 
 func NewKafkaPublisher() *KafkaPublisher {
-	return &KafkaPublisher{}
+	return &KafkaPublisher{
+		writers: make(map[string]*kafka.Writer),
+	}
+}
+
+func (p *KafkaPublisher) writerFor(brokers []string, topic string) *kafka.Writer {
+	key := strings.Join(brokers, ",") + "|" + topic
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if w, ok := p.writers[key]; ok {
+		return w
+	}
+	w := &kafka.Writer{
+		Addr:  kafka.TCP(brokers...),
+		Topic: topic,
+	}
+	p.writers[key] = w
+	return w
 }
 
 // Publish writes a single message to the given topic via the provided brokers.
 func (p *KafkaPublisher) Publish(ctx context.Context, brokers []string, topic string, message []byte) error {
-	writer := &kafka.Writer{
-		Addr:  kafka.TCP(brokers...),
-		Topic: topic,
+	return p.writerFor(brokers, topic).WriteMessages(ctx, kafka.Message{Value: message})
+}
+
+// Close shuts down all pooled writers and releases their connections.
+func (p *KafkaPublisher) Close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for key, w := range p.writers {
+		w.Close()
+		delete(p.writers, key)
 	}
-	defer writer.Close()
-	return writer.WriteMessages(ctx, kafka.Message{Value: message})
 }
