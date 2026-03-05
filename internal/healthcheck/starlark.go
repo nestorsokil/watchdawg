@@ -14,7 +14,7 @@ import (
 )
 
 type StarlarkChecker struct {
-	NoOpInitializer
+	noOpInitializer
 	logger   *slog.Logger
 	recorder MetricsRecorder
 }
@@ -23,7 +23,7 @@ func NewStarlarkChecker(logger *slog.Logger, recorder MetricsRecorder) *Starlark
 	return &StarlarkChecker{logger: logger, recorder: recorder}
 }
 
-func (k *StarlarkChecker) IsMatching(check *models.HealthCheck) bool { return check.Starlark != nil }
+func (s *StarlarkChecker) IsMatching(check *models.HealthCheck) bool { return check.Starlark != nil }
 
 func (s *StarlarkChecker) Execute(ctx context.Context, check *models.HealthCheck) *models.CheckResult {
 	return executeWithRetry(ctx, check, s.executeOnce)
@@ -52,7 +52,7 @@ func (s *StarlarkChecker) executeOnce(ctx context.Context, check *models.HealthC
 	if err != nil {
 		result.Healthy = false
 		result.Error = err.Error()
-		result.Message = result.Error
+		result.Message = "Starlark script execution failed"
 		return result
 	}
 

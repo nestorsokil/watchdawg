@@ -37,17 +37,18 @@ type Checker interface {
 	Cleanup(ctx context.Context) error
 }
 
-type NoOpInitializer struct{}
+// noOpInitializer provides no-op Init and Cleanup for checkers that have no lifecycle.
+type noOpInitializer struct{}
 
-func (NoOpInitializer) Init(ctx context.Context, check *models.HealthCheck) error { return nil }
-func (NoOpInitializer) Cleanup(ctx context.Context) error                         { return nil }
+func (noOpInitializer) Init(ctx context.Context, check *models.HealthCheck) error { return nil }
+func (noOpInitializer) Cleanup(ctx context.Context) error                         { return nil }
 
 type Scheduler struct {
-	cron                   *cron.Cron
+	cron     *cron.Cron
 	checkers []Checker
-	notifier               *HookNotifier
-	recorder               MetricsRecorder
-	logger                 *slog.Logger
+	notifier *HookNotifier
+	recorder MetricsRecorder
+	logger   *slog.Logger
 	// rootCtx is cancelled in Stop to signal background workers (e.g. Kafka consumers).
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
@@ -63,7 +64,7 @@ func NewScheduler(logger *slog.Logger, recorder MetricsRecorder) *Scheduler {
 			cron.WithChain(cron.Recover(adapter)),
 			cron.WithLogger(adapter),
 		),
-		checkers: []Checker {
+		checkers: []Checker{
 			NewHTTPChecker(logger, recorder),
 			NewGRPCChecker(logger, recorder),
 			NewKafkaChecker(logger, recorder),
@@ -78,17 +79,26 @@ func NewScheduler(logger *slog.Logger, recorder MetricsRecorder) *Scheduler {
 }
 
 func (s *Scheduler) AddHealthCheck(check models.HealthCheck) error {
+	var matchedChecker Checker
 	for _, checker := range s.checkers {
 		if checker.IsMatching(&check) {
-			checker.Init(s.rootCtx, &check)
+			matchedChecker = checker
 			break
 		}
+	}
+
+	if matchedChecker == nil {
+		return fmt.Errorf("no checker found for health check '%s': no recognised check type configured", check.Name)
+	}
+
+	if err := matchedChecker.Init(s.rootCtx, &check); err != nil {
+		return fmt.Errorf("failed to initialise checker for '%s': %w", check.Name, err)
 	}
 
 	schedule := s.parseSchedule(check.Schedule)
 
 	_, err := s.cron.AddFunc(schedule, func() {
-		s.executeHealthCheck(check)
+		s.executeHealthCheck(check, matchedChecker)
 	})
 
 	if err != nil {
@@ -106,12 +116,14 @@ func (s *Scheduler) Start() {
 
 func (s *Scheduler) Stop() {
 	s.logger.Info("Stopping health check scheduler")
-	ctx := s.cron.Stop()
-	<-ctx.Done()
+	// Cancel background workers (e.g. Kafka consumers) before draining cron jobs,
+	// so they begin shutting down in parallel with the job drain.
 	s.rootCancel()
-	for _, check := range s.checkers {
-		if err := check.Cleanup(ctx); err != nil {
-			s.logger.Error(fmt.Sprintf("Failed cleanup on checker %T: %v", check, err))
+	cronCtx := s.cron.Stop()
+	<-cronCtx.Done()
+	for _, checker := range s.checkers {
+		if err := checker.Cleanup(context.Background()); err != nil {
+			s.logger.Error("Failed cleanup on checker", "checker", fmt.Sprintf("%T", checker), "error", err)
 		}
 	}
 	s.notifier.Close()
@@ -121,20 +133,19 @@ func (s *Scheduler) Stop() {
 func (s *Scheduler) parseSchedule(schedule string) string {
 	schedule = strings.TrimSpace(schedule)
 
-	if strings.HasSuffix(schedule, "s") || strings.HasSuffix(schedule, "m") || strings.HasSuffix(schedule, "h") {
-		duration, err := time.ParseDuration(schedule)
-		if err == nil {
-			seconds := int(duration.Seconds())
-			if seconds < 60 {
-				return fmt.Sprintf("*/%d * * * * *", seconds)
-			}
-			minutes := seconds / 60
-			if minutes < 60 {
-				return fmt.Sprintf("0 */%d * * * *", minutes)
-			}
-			hours := minutes / 60
-			return fmt.Sprintf("0 0 */%d * * *", hours)
+	// Attempt duration parsing first; this handles "30s", "5m", "2h", "500ms", etc.
+	// Only fall through to cron parsing when it is not a valid duration string.
+	if duration, err := time.ParseDuration(schedule); err == nil {
+		seconds := int(duration.Seconds())
+		if seconds < 60 {
+			return fmt.Sprintf("*/%d * * * * *", seconds)
 		}
+		minutes := seconds / 60
+		if minutes < 60 {
+			return fmt.Sprintf("0 */%d * * * *", minutes)
+		}
+		hours := minutes / 60
+		return fmt.Sprintf("0 0 */%d * * *", hours)
 	}
 
 	// Standard cron: "minute hour day month weekday"
@@ -147,24 +158,11 @@ func (s *Scheduler) parseSchedule(schedule string) string {
 	return schedule
 }
 
-func (s *Scheduler) executeHealthCheck(check models.HealthCheck) {
+func (s *Scheduler) executeHealthCheck(check models.HealthCheck, checker Checker) {
 	s.logger.Info("Executing health check", "check", check.Name)
 
 	ctx, cancel := context.WithTimeout(context.Background(), check.Timeout)
 	defer cancel()
-
-	var checker Checker
-	for _, entry := range s.checkers {
-		if entry.IsMatching(&check) {
-			checker = entry
-			break
-		}
-	}
-
-	if checker == nil {
-		s.logger.Error("Check has no recognizable sub-config; skipping", "check", check.Name)
-		return
-	}
 
 	result := checker.Execute(ctx, &check)
 

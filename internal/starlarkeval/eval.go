@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"go.starlark.net/starlark"
@@ -103,6 +104,11 @@ func RunCheckScript(ctx context.Context, threadName, filename, script string, gl
 	return healthy, message, nil
 }
 
+// scriptKeywordPattern matches assignment targets (valid/healthy/message with optional
+// surrounding whitespace around =), function definitions, and import statements.
+// Used to distinguish simple expressions from full scripts.
+var scriptKeywordPattern = regexp.MustCompile(`\b(valid|healthy|message)\s*=|def |\bimport\b`)
+
 // IsSimpleExpression reports whether script is a single-line expression that
 // should be auto-wrapped as `valid = <expr>`. Multi-line scripts, scripts with
 // assignments/definitions, and import statements are not considered simple.
@@ -113,15 +119,7 @@ func IsSimpleExpression(script string) bool {
 		return false
 	}
 
-	if strings.Contains(script, "valid =") ||
-		strings.Contains(script, "healthy =") ||
-		strings.Contains(script, "message =") ||
-		strings.Contains(script, "def ") ||
-		strings.HasPrefix(script, "import ") {
-		return false
-	}
-
-	return true
+	return !scriptKeywordPattern.MatchString(script)
 }
 
 // toStarlark is the shared conversion core. onUnknown determines what Starlark
@@ -320,9 +318,9 @@ func extractCheckResult(globals starlark.StringDict) (healthy bool, message stri
 		}
 	}
 
-	// No explicit result: default to success.
+	// No explicit result: default to healthy.
+	healthy = true
 	if message == "" {
-		healthy = true
 		message = "Starlark check completed"
 	}
 
