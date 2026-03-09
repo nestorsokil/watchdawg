@@ -92,4 +92,4 @@ An operator wants to control the consumer group ID used by the check, e.g. to av
 - **SC-001**: An operator can detect topic silence within one schedule interval of the last message
 - **SC-002**: An operator can validate message content without modifying the producer or adding custom consumers
 - **SC-003**: The background consumer recovers from transient broker connectivity issues without operator intervention
-- **SC-004**: Starting WatchDawg does not produce false alarms for topics that are simply quiet at startup
+- **SC-004**: Starting Watchdawg does not produce false alarms for topics that are simply quiet at startup

@@ -30,7 +30,7 @@
 
 An operator has several healthchecks running on a schedule. They want execution results for specific checks to be recorded persistently so they can review them after the fact — even across daemon restarts.
 
-They opt specific checks into recording via config. WatchDawg stores each execution's outcome (pass/fail), timestamp, duration, and failure reason (if any) to a local store on disk. The store survives daemon restarts.
+They opt specific checks into recording via config. Watchdawg stores each execution's outcome (pass/fail), timestamp, duration, and failure reason (if any) to a local store on disk. The store survives daemon restarts.
 
 **Why this priority**: This is the foundation of the feature. Reporting is impossible without stored data. Delivers immediate value even before any reporting interface exists.
 
@@ -39,7 +39,7 @@ They opt specific checks into recording via config. WatchDawg stores each execut
 **Acceptance Scenarios**:
 
 1. **Given** a check is configured with recording enabled, **When** it executes (pass or fail), **Then** the result, timestamp, duration, and error message (if failed) are written to the persistent store.
-2. **Given** WatchDawg is restarted, **When** a recorded check executes again, **Then** the new record is appended to the existing history without data loss.
+2. **Given** Watchdawg is restarted, **When** a recorded check executes again, **Then** the new record is appended to the existing history without data loss.
 3. **Given** a check is configured without recording enabled, **When** it executes, **Then** no execution record is written to the store.
 
 ---
@@ -65,7 +65,7 @@ An operator suspects a healthcheck has been failing intermittently. They call a 
 
 ### User Story 3 - Bounded Storage via Retention Policy (Priority: P3)
 
-An operator runs WatchDawg continuously. Without limits, stored execution records would grow without bound. They configure a retention policy so the store stays manageable over time.
+An operator runs Watchdawg continuously. Without limits, stored execution records would grow without bound. They configure a retention policy so the store stays manageable over time.
 
 **Why this priority**: Necessary for production use but does not affect core functionality. Can be deferred without breaking P1/P2.
 
@@ -127,7 +127,7 @@ An operator runs WatchDawg continuously. Without limits, stored execution record
 
 - **Opt-in recording**: "Select healthchecks" means individual checks are opted in via config (e.g., a `record: true` flag). All-or-nothing global recording is not supported in this iteration.
 - **REST API reporting**: The reporting interface is a REST API endpoint. HTML reporting is explicitly out of scope and planned as a subsequent feature.
-- **Local storage only**: The persistent store is local to the machine running WatchDawg. Remote/centralized storage is out of scope.
+- **Local storage only**: The persistent store is local to the machine running Watchdawg. Remote/centralized storage is out of scope.
 - **Default retention**: 1000 records per check if not explicitly configured.
 - **Per-execution granularity**: Each top-level check execution is one record (not per-retry attempt).
 - **No alerting changes**: This feature does not change how webhooks or notifications are triggered.

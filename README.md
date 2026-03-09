@@ -1,4 +1,13 @@
-# WatchDawg
+```
+ __        __    _       _     ____
+ \ \      / /_ _| |_ ___| |__ |  _ \  __ ___      ______ _
+  \ \ /\ / / _` | __/ __| '_ \| | | |/ _` \ \ /\ / / _` |
+   \ V  V / (_| | || (__| | | | |_| | (_| |\ V  V / (_| |
+    \_/\_/ \__,_|\__\___|_| |_|____/ \__,_| \_/\_/ \__, |
+                                                     |___/
+```
+
+# Watchdawg
 
 A dynamic, extensible healthchecking service built with Go that executes user-defined health checks and sends webhook notifications on success or failure.
 
@@ -51,7 +60,7 @@ cp config.example.json config.json
 # Edit config.json with your health checks
 ```
 
-2. Run WatchDawg:
+2. Run Watchdawg:
 
 ```bash
 ./bin/watchdawg -config config.json
@@ -61,7 +70,7 @@ cp config.example.json config.json
 
 ### Loading Config
 
-WatchDawg supports three config sources:
+Watchdawg supports three config sources:
 
 **File (default)**
 ```bash
@@ -309,7 +318,7 @@ With `format: "json"` or `"xml"`:
 
 ### Scheduling
 
-WatchDawg supports two schedule formats:
+Watchdawg supports two schedule formats:
 
 1. **Interval format**: `30s`, `5m`, `1h`, `2h30m`
 2. **Cron format**: `0 */5 * * * *` (with seconds)
@@ -360,9 +369,9 @@ If `body_template` is not provided, the full check result is sent as JSON.
 
 ## Monitoring
 
-WatchDawg exposes Prometheus metrics at the address configured in the `metrics` block. A pre-built Grafana dashboard is included.
+Watchdawg exposes Prometheus metrics at the address configured in the `metrics` block. A pre-built Grafana dashboard is included.
 
-![WatchDawg Grafana Dashboard](monitoring/dashboard.png)
+![Watchdawg Grafana Dashboard](monitoring/dashboard.png)
 
 Start the monitoring stack alongside the main service:
 

@@ -17,7 +17,7 @@ func main() {
 	logger := buildLogger()
 	slog.SetDefault(logger)
 
-	logger.Info("WatchDawg - Dynamic Health Checking Service")
+	logger.Info("Watchdawg - Dynamic Health Checking Service")
 
 	configPath := flag.String("config", "config.json", "Path to configuration file")
 	flag.Parse()
@@ -69,7 +69,7 @@ func main() {
 	logger.Info("Received shutdown signal")
 	metricsCancel()
 	scheduler.Stop()
-	logger.Info("WatchDawg stopped")
+	logger.Info("Watchdawg stopped")
 }
 
 func buildLogger() *slog.Logger {

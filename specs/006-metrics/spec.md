@@ -8,7 +8,7 @@
 
 ### User Story 1 - Check Health Metrics (Priority: P1)
 
-An operator running WatchDawg in production wants to scrape check health status and execution counts into their existing monitoring stack (e.g. Prometheus + Grafana), so they can build dashboards and alerts without polling WatchDawg logs.
+An operator running Watchdawg in production wants to scrape check health status and execution counts into their existing monitoring stack (e.g. Prometheus + Grafana), so they can build dashboards and alerts without polling Watchdawg logs.
 
 **Why this priority**: Health metrics (up/down gauge, execution counter, duration histogram) are the core observability value. Everything else builds on having these scraped.
 
@@ -16,13 +16,13 @@ An operator running WatchDawg in production wants to scrape check health status 
 
 **Acceptance Scenarios**:
 
-1. **Given** a `metrics` block with a valid `address`, **When** WatchDawg starts, **Then** a metrics endpoint is available at that address
-2. **Given** no `metrics` block in config, **When** WatchDawg starts, **Then** no metrics endpoint is started
+1. **Given** a `metrics` block with a valid `address`, **When** Watchdawg starts, **Then** a metrics endpoint is available at that address
+2. **Given** no `metrics` block in config, **When** Watchdawg starts, **Then** no metrics endpoint is started
 3. **Given** a check that just ran healthy, **When** the endpoint is scraped, **Then** `watchdawg_check_up{check="..."}` is `1`
 4. **Given** a check that just ran unhealthy, **When** the endpoint is scraped, **Then** `watchdawg_check_up{check="..."}` is `0`
 5. **Given** a check with retries that fails twice then succeeds, **When** the endpoint is scraped, **Then** `watchdawg_check_executions_total` shows 2 failures and 1 success
 6. **Given** a check that has never run, **When** the endpoint is scraped, **Then** `watchdawg_check_up` is not present for that check
-7. **Given** an unrecognised `type` value, **When** WatchDawg starts, **Then** startup fails with a configuration error
+7. **Given** an unrecognised `type` value, **When** Watchdawg starts, **Then** startup fails with a configuration error
 
 ---
 
@@ -59,7 +59,7 @@ An operator monitoring Kafka checks wants to track how stale the most recently s
 
 ### Edge Cases
 
-- What if the metrics address is already in use? WatchDawg fails to start with an error.
+- What if the metrics address is already in use? Watchdawg fails to start with an error.
 - What if only `address` is configured (no `type`)? Defaults to `"prometheus"`.
 - Does the metrics server shut down cleanly on SIGINT/SIGTERM? Yes, it shuts down with the daemon.
 - Are metrics namespaced to avoid collisions? Yes, all metrics use the `watchdawg` namespace.
@@ -87,7 +87,7 @@ An operator monitoring Kafka checks wants to track how stale the most recently s
 
 ### Measurable Outcomes
 
-- **SC-001**: An operator can build a dashboard showing real-time check health status without parsing WatchDawg logs
+- **SC-001**: An operator can build a dashboard showing real-time check health status without parsing Watchdawg logs
 - **SC-002**: An operator can alert on check execution frequency dropping below expected rate
 - **SC-003**: An operator can detect slow or failing hooks by monitoring hook duration and failure counters
 - **SC-004**: An operator can alert on Kafka topic message lag using the message age gauge

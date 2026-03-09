@@ -1,5 +1,5 @@
 // Package starlarkeval provides shared utilities for executing Starlark scripts
-// in WatchDawg health checks. It consolidates all starlark.ExecFile calls and
+// in Watchdawg health checks. It consolidates all starlark.ExecFile calls and
 // result-extraction logic that is otherwise duplicated across HTTP assertions,
 // Starlark checks, and Kafka assertions.
 package starlarkeval

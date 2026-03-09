@@ -2,13 +2,13 @@
 
 ## Architecture
 
-Tests run inside Docker Compose as the `integration-tests` service (profile: `test`). Two in-process Flask stubs start as daemon threads via session fixtures in `conftest.py` and are accessible from WatchDawg at `integration-tests:<port>`.
+Tests run inside Docker Compose as the `integration-tests` service (profile: `test`). Two in-process Flask stubs start as daemon threads via session fixtures in `conftest.py` and are accessible from Watchdawg at `integration-tests:<port>`.
 
 ### Stubs
 
 | Stub | Port | Path | Purpose |
 |------|------|------|---------|
-| `healthcheck_target` | 8080 | `GET /target/health` | HTTP endpoint WatchDawg checks |
+| `healthcheck_target` | 8080 | `GET /target/health` | HTTP endpoint Watchdawg checks |
 | `webhook_receiver` | 9090 | `POST /callback/success` / `POST /callback/failure` | Captures webhook notifications |
 
 ### Fixture Pattern

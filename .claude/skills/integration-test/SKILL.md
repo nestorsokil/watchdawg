@@ -1,11 +1,11 @@
 ---
 name: integration-test
-description: Run WatchDawg integration tests using Docker Compose
+description: Run Watchdawg integration tests using Docker Compose
 user-invocable: true
 allowed-tools: Bash
 ---
 
-Run the WatchDawg integration test suite. Tests run inside a Docker container alongside nginx and watchdawg.
+Run the Watchdawg integration test suite. Tests run inside a Docker container alongside nginx and watchdawg.
 
 ## Steps
 
