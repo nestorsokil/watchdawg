@@ -71,7 +71,7 @@ func TestHistoryConfig_RecordAllDefault(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// RecordAll defaults to false (zero value); no explicit default needed
-	if cfg.History.RecordAll {
+	if cfg.History.RecordAllChecks {
 		t.Error("expected RecordAll to default to false")
 	}
 }

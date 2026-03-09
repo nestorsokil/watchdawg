@@ -24,7 +24,7 @@ type MetricsConfig struct {
 type HistoryConfig struct {
 	DBPath    string `json:"db_path"`
 	Retention int    `json:"retention,omitempty"`
-	RecordAll bool   `json:"record_all_healthchecks,omitempty"`
+	RecordAllChecks bool `json:"record_all_healthchecks,omitempty"`
 }
 
 type HealthCheck struct {
@@ -43,7 +43,6 @@ type HealthCheck struct {
 	Record    bool `json:"record,omitempty"`    // opt this check into execution history recording
 	Retention int  `json:"retention,omitempty"` // per-check retention override; 0 = use global default
 }
-
 
 type ResponseFormat string
 

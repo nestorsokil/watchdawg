@@ -10,26 +10,14 @@ import (
 	"watchdawg/internal/models"
 )
 
-// openTestStore opens an in-memory SQLite store for unit tests.
-// Multiple calls within the same test binary share the same in-memory database, so we
-// use a unique URI per test via the test name.
-func openTestStore(t *testing.T) *SQLiteStore {
+func openInMemoryStore(t *testing.T) *SQLiteStore {
 	t.Helper()
 	cfg := &models.HistoryConfig{DBPath: ":memory:"}
-	// Use file::memory:?cache=shared so multiple connections share the same DB.
-	// We override the DSN directly via a helper since NewSQLiteStore builds its own DSN.
-	store, err := openInMemoryStore(t)
+	store, err := NewSQLiteStore(cfg, slog.Default())
 	if err != nil {
-		t.Fatalf("failed to open test store: %v", err)
+		t.Fatalf("failed to open in-memory store: %v", err)
 	}
-	_ = cfg
 	return store
-}
-
-func openInMemoryStore(t *testing.T) (*SQLiteStore, error) {
-	t.Helper()
-	cfg := &models.HistoryConfig{DBPath: ":memory:"}
-	return NewSQLiteStore(cfg, slog.Default())
 }
 
 func makeCheck(name string) *models.HealthCheck {
@@ -48,7 +36,7 @@ func makeResult(healthy bool, durationMs int64, errMsg string) *models.CheckResu
 // --- Write tests (T007) ---
 
 func TestWrite_AllFieldsPersisted(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	check := makeCheck("api-health")
@@ -85,7 +73,7 @@ func TestWrite_AllFieldsPersisted(t *testing.T) {
 }
 
 func TestWrite_FailureRecord(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	check := makeCheck("db-ping")
@@ -109,7 +97,7 @@ func TestWrite_FailureRecord(t *testing.T) {
 }
 
 func TestWrite_UUIDUniqueness(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	check := makeCheck("test")
@@ -134,7 +122,7 @@ func TestWrite_UUIDUniqueness(t *testing.T) {
 }
 
 func TestWrite_ContextCancellation(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -150,7 +138,7 @@ func TestWrite_ContextCancellation(t *testing.T) {
 // --- QueryCheck tests (T015) ---
 
 func TestQueryCheck_ReturnsNewestFirst(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	check := makeCheck("ordered")
@@ -179,7 +167,7 @@ func TestQueryCheck_ReturnsNewestFirst(t *testing.T) {
 }
 
 func TestQueryCheck_NotFound(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	_, err := store.QueryCheck(context.Background(), "nonexistent", 10)
@@ -189,7 +177,7 @@ func TestQueryCheck_NotFound(t *testing.T) {
 }
 
 func TestQueryCheck_LimitRespected(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	check := makeCheck("limited")
@@ -209,7 +197,7 @@ func TestQueryCheck_LimitRespected(t *testing.T) {
 }
 
 func TestQueryCheck_MultipleChecksIsolated(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	for _, name := range []string{"check-a", "check-b", "check-c"} {
@@ -233,7 +221,7 @@ func TestQueryCheck_MultipleChecksIsolated(t *testing.T) {
 // --- QueryAll tests ---
 
 func TestQueryAll_EmptyStore(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	result, err := store.QueryAll(context.Background(), 10)
@@ -246,7 +234,7 @@ func TestQueryAll_EmptyStore(t *testing.T) {
 }
 
 func TestQueryAll_MultipleChecks(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	for _, name := range []string{"alpha", "beta"} {
@@ -276,7 +264,7 @@ func TestQueryAll_MultipleChecks(t *testing.T) {
 // --- Eviction / retention tests (T021) ---
 
 func TestWrite_RetentionLimitEnforced(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	check := makeCheck("retained")
@@ -300,7 +288,7 @@ func TestWrite_RetentionLimitEnforced(t *testing.T) {
 }
 
 func TestWrite_OldestRecordsEvicted(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	check := makeCheck("evict-order")
@@ -331,7 +319,7 @@ func TestWrite_OldestRecordsEvicted(t *testing.T) {
 
 func TestWrite_PerCheckRetentionBeatsGlobal(t *testing.T) {
 	// Simulate two writes: one with retention=10, then override per-check with retention=2
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	check := makeCheck("per-check")
@@ -356,7 +344,7 @@ func TestWrite_PerCheckRetentionBeatsGlobal(t *testing.T) {
 }
 
 func TestWrite_GlobalDefaultRetention1000(t *testing.T) {
-	store := openTestStore(t)
+	store := openInMemoryStore(t)
 	defer store.Close()
 
 	// Write 10 records with the global default retention of 1000; all should be kept

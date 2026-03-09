@@ -23,9 +23,8 @@ func NewHandler(store ExecutionStore, logger *slog.Logger) *Handler {
 	return &Handler{store: store, logger: logger}
 }
 
-// Handler returns the HTTP handler for the /history/ subtree.
-func (h *Handler) Handler() http.Handler {
-	return http.HandlerFunc(h.handleHistory)
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.handleHistory(w, r)
 }
 
 // handleHistory dispatches GET /history/{check_name} and GET /history/*.
@@ -49,6 +48,10 @@ func (h *Handler) handleHistory(w http.ResponseWriter, r *http.Request) {
 	if checkName == "*" {
 		h.handleAll(w, r, limit)
 	} else {
+		if len(checkName) > 256 || strings.ContainsAny(checkName, "/\x00") {
+			writeError(w, "invalid check name", http.StatusBadRequest)
+			return
+		}
 		h.handleCheck(w, r, checkName, limit)
 	}
 }

@@ -82,7 +82,7 @@ func TestHandlerGetCheck_200(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/history/api-health", nil)
 	rr := httptest.NewRecorder()
-	h.Handler().ServeHTTP(rr, req)
+	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -104,7 +104,7 @@ func TestHandlerGetCheck_404NotFound(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/history/missing-check", nil)
 	rr := httptest.NewRecorder()
-	h.Handler().ServeHTTP(rr, req)
+	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
@@ -124,7 +124,7 @@ func TestHandlerGetCheck_400InvalidLimit(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/history/any?limit=0", nil)
 	rr := httptest.NewRecorder()
-	h.Handler().ServeHTTP(rr, req)
+	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
@@ -141,7 +141,7 @@ func TestHandlerGetCheck_LimitApplied(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/history/svc?limit=3", nil)
 	rr := httptest.NewRecorder()
-	h.Handler().ServeHTTP(rr, req)
+	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -161,7 +161,7 @@ func TestHandlerGetAll_200EmptyMap(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/history/*", nil)
 	rr := httptest.NewRecorder()
-	h.Handler().ServeHTTP(rr, req)
+	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -187,7 +187,7 @@ func TestHandlerGetAll_200WithRecords(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/history/*", nil)
 	rr := httptest.NewRecorder()
-	h.Handler().ServeHTTP(rr, req)
+	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -208,7 +208,7 @@ func TestHandlerGetAll_DefaultLimitApplied(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/history/*", nil)
 	rr := httptest.NewRecorder()
-	h.Handler().ServeHTTP(rr, req)
+	h.ServeHTTP(rr, req)
 
 	var resp checksResponse
 	json.NewDecoder(rr.Body).Decode(&resp)

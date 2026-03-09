@@ -153,35 +153,36 @@ func (s *SQLiteStore) QueryCheck(ctx context.Context, checkName string, limit in
 
 // QueryAll returns up to limit records per check for every check that has history, newest first per check.
 func (s *SQLiteStore) QueryAll(ctx context.Context, limit int) (map[string][]Record, error) {
-	nameRows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT check_name FROM execution_records ORDER BY check_name`,
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT check_name, id, timestamp, healthy, duration_ms, error
+		 FROM (
+		   SELECT check_name, id, timestamp, healthy, duration_ms, error,
+		          ROW_NUMBER() OVER (PARTITION BY check_name ORDER BY timestamp DESC) AS rn
+		   FROM execution_records
+		 ) ranked
+		 WHERE rn <= ?
+		 ORDER BY check_name, timestamp DESC`,
+		limit,
 	)
 	if err != nil {
 		return nil, err
 	}
-	defer nameRows.Close()
+	defer rows.Close()
 
-	var names []string
-	for nameRows.Next() {
-		var name string
-		if err := nameRows.Scan(&name); err != nil {
+	result := make(map[string][]Record)
+	for rows.Next() {
+		var checkName string
+		var r Record
+		var tsNano int64
+		var healthy int
+		if err := rows.Scan(&checkName, &r.ID, &tsNano, &healthy, &r.DurationMs, &r.Error); err != nil {
 			return nil, err
 		}
-		names = append(names, name)
+		r.Timestamp = time.Unix(0, tsNano).UTC()
+		r.Healthy = healthy == 1
+		result[checkName] = append(result[checkName], r)
 	}
-	if err := nameRows.Err(); err != nil {
-		return nil, err
-	}
-
-	result := make(map[string][]Record, len(names))
-	for _, name := range names {
-		records, err := s.QueryCheck(ctx, name, limit)
-		if err != nil && !errors.Is(err, ErrNotFound) {
-			return nil, err
-		}
-		result[name] = records
-	}
-	return result, nil
+	return result, rows.Err()
 }
 
 func (s *SQLiteStore) Close() error {

@@ -177,7 +177,7 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck, checker Checker
 
 	s.recorder.RecordCheckUp(check.Name, result.Healthy)
 
-	if s.history != nil && (s.historyCfg.RecordAll || check.Record) {
+	if s.history != nil && (s.historyCfg.RecordAllChecks || check.Record) {
 		s.history.Record(&check, result)
 	}
 
