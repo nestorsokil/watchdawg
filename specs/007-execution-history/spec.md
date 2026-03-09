@@ -7,6 +7,10 @@
 
 ## Clarifications
 
+### Session 2026-03-09
+
+- Direct: ExecutionRecord identifiers use UUID (not autoincrement integers).
+
 ### Session 2026-03-06
 
 - Q: How should concurrent writes from parallel check executions be handled? → A: Concurrency control is delegated to the underlying storage mechanism; the choice of storage is a plan-phase decision.
@@ -87,7 +91,7 @@ An operator runs WatchDawg continuously. Without limits, stored execution record
 ### Functional Requirements
 
 - **FR-001**: Operators MUST be able to opt individual healthchecks into execution recording via the config file.
-- **FR-002**: System MUST record, for each opted-in check execution: status (pass/fail), start timestamp, execution duration, and error message (if failed).
+- **FR-002**: System MUST record, for each opted-in check execution: a UUID identifier (generated at write time), status (pass/fail), start timestamp, execution duration, and error message (if failed). Autoincrement integer IDs MUST NOT be used.
 - **FR-003**: Recorded data MUST persist across daemon restarts.
 - **FR-004**: The API MUST expose a `GET /history/{check_name}` endpoint returning execution records for that specific check in reverse-chronological order.
 - **FR-004b**: The API MUST expose a `GET /history/*` endpoint returning execution records for all recorded checks.
@@ -105,7 +109,7 @@ An operator runs WatchDawg continuously. Without limits, stored execution record
 
 ### Key Entities
 
-- **ExecutionRecord**: Represents a single check execution. Key attributes: check name, timestamp (when execution started), duration (total execution time), status (pass/fail), error message (empty if passed).
+- **ExecutionRecord**: Represents a single check execution. Key attributes: id (UUID, globally unique, generated at write time), check name, timestamp (when execution started), duration (total execution time), status (pass/fail), error message (empty if passed). Autoincrement integer IDs are explicitly rejected; UUID is the identity scheme.
 - **ExecutionStore**: The persistent container of all execution records, keyed by check name. Enforces retention policy, survives process restarts, and delegates concurrent write safety to the underlying storage mechanism.
 - **RetentionPolicy**: Defines how many records to keep per check. Can be set globally or overridden per check. A global default is always in effect. Oldest records are evicted to enforce the limit.
 
