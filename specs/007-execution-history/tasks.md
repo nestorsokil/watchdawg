@@ -21,8 +21,8 @@ testing of each story.
 
 **Purpose**: Add new dependency; create package skeleton.
 
-- [ ] T001 Add `modernc.org/sqlite` dependency: run `go get modernc.org/sqlite` and verify `go.mod` / `go.sum` are updated
-- [ ] T002 [P] Create `internal/history/` package with empty placeholder files: `store.go`, `recorder.go`, `api.go` (each with `package history` only)
+- [X] T001 Add `modernc.org/sqlite` dependency: run `go get modernc.org/sqlite` and verify `go.mod` / `go.sum` are updated
+- [X] T002 [P] Create `internal/history/` package with empty placeholder files: `store.go`, `recorder.go`, `api.go` (each with `package history` only)
 
 ---
 
@@ -32,10 +32,10 @@ testing of each story.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T003 [P] Add `HistoryConfig` struct (`DBPath string`, `Retention int`, `RecordAll bool`) and `Record bool` + `Retention int` fields to `HealthCheck` in `internal/models/config.go`
-- [ ] T004 Add history validation + defaults to `internal/config/loader.go`: `db_path` required when `history` block present; `retention` defaults to `1000`; per-check `retention` must be `> 0` if set; `record_all_healthchecks` defaults to `false`; path-scoped error messages per Constitution I
-- [ ] T005 [P] Update `configs/config.example.json` with `history` block (`db_path`, `retention`, `record_all_healthchecks`) and `record` / `retention` fields in an example check entry
-- [ ] T006 [P] Add unit tests for history config validation in `internal/config/loader_test.go`: missing `db_path`, invalid `retention`, valid block, `record_all_healthchecks` default, per-check retention override, no `history` block (zero impact on existing checks)
+- [X] T003 [P] Add `HistoryConfig` struct (`DBPath string`, `Retention int`, `RecordAll bool`) and `Record bool` + `Retention int` fields to `HealthCheck` in `internal/models/config.go`
+- [X] T004 Add history validation + defaults to `internal/config/loader.go`: `db_path` required when `history` block present; `retention` defaults to `1000`; per-check `retention` must be `> 0` if set; `record_all_healthchecks` defaults to `false`; path-scoped error messages per Constitution I
+- [X] T005 [P] Update `configs/config.example.json` with `history` block (`db_path`, `retention`, `record_all_healthchecks`) and `record` / `retention` fields in an example check entry
+- [X] T006 [P] Add unit tests for history config validation in `internal/config/loader_test.go`: missing `db_path`, invalid `retention`, valid block, `record_all_healthchecks` default, per-check retention override, no `history` block (zero impact on existing checks)
 
 **Checkpoint**: Config schema and validation complete — user story phases can begin
 
@@ -49,16 +49,16 @@ testing of each story.
 
 ### Unit Tests for US1
 
-- [ ] T007 [P] [US1] Write unit tests for `SQLiteStore.Write` in `internal/history/store_test.go`: write succeeds and all fields are persisted correctly (check name, healthy, duration, error, timestamp); `context.Context` cancellation returns an error; use in-memory DB (`file::memory:?cache=shared`) throughout
-- [ ] T010 [P] [US1] Write unit tests for `Recorder` in `internal/history/recorder_test.go`: `Record()` dispatches to store; drop-on-full logs Warn and does not block the caller; `Stop()` drains pending jobs before returning; panic in store `Write` is recovered and logged
+- [X] T007 [P] [US1] Write unit tests for `SQLiteStore.Write` in `internal/history/store_test.go`: write succeeds and all fields are persisted correctly (check name, healthy, duration, error, timestamp); `context.Context` cancellation returns an error; use in-memory DB (`file::memory:?cache=shared`) throughout
+- [X] T010 [P] [US1] Write unit tests for `Recorder` in `internal/history/recorder_test.go`: `Record()` dispatches to store; drop-on-full logs Warn and does not block the caller; `Stop()` drains pending jobs before returning; panic in store `Write` is recovered and logged
 
 ### Implementation for US1
 
-- [ ] T008 [P] [US1] Define `HistoryRecorder` interface in `internal/healthcheck/history_recorder.go`: `Record(check *models.HealthCheck, result *models.CheckResult)`
-- [ ] T009 [P] [US1] Implement `ExecutionStore` interface, `Record` struct, `SQLiteStore` struct, `NewSQLiteStore(cfg *models.HistoryConfig, logger *slog.Logger)` (opens DB with WAL + busy-timeout DSN, runs `CREATE TABLE IF NOT EXISTS`, sets connection pool limits), and `Write(ctx context.Context, check *models.HealthCheck, result *models.CheckResult, retention int)` (INSERT only; `retention` parameter accepted but eviction deferred to US3), `Close() error` in `internal/history/store.go`
-- [ ] T011 [US1] Add `history HistoryRecorder` field and `SetHistoryRecorder(h HistoryRecorder)` method to `Scheduler` in `internal/healthcheck/scheduler.go`; add nil-safe `if s.history != nil { s.history.Record(&check, result) }` call in `executeHealthCheck` after `RecordCheckUp`
-- [ ] T012 [US1] Implement `Recorder` in `internal/history/recorder.go`: buffered channel (const `256`), `NewRecorder(store ExecutionStore, logger *slog.Logger)`, non-blocking `Record()` with `slog.Warn` on drop, `Start(ctx context.Context)` background goroutine with `defer recover()` and error log, `Stop()` that drains remaining jobs (up to 5 s timeout) then calls `store.Close()`
-- [ ] T013 [US1] Wire history in `cmd/watchdawg/main.go`: after metrics setup, if `cfg.History != nil` open `SQLiteStore` (fail-fast with `logger.Error` + `os.Exit(1)` on error), create `Recorder`, call `scheduler.SetHistoryRecorder(recorder)`, `go recorder.Start(metricsCtx)`, defer `recorder.Stop()`; compute effective opt-in per check: `cfg.History.RecordAll || check.Record`
+- [X] T008 [P] [US1] Define `HistoryRecorder` interface in `internal/healthcheck/history_recorder.go`: `Record(check *models.HealthCheck, result *models.CheckResult)`
+- [X] T009 [P] [US1] Implement `ExecutionStore` interface, `Record` struct, `SQLiteStore` struct, `NewSQLiteStore(cfg *models.HistoryConfig, logger *slog.Logger)` (opens DB with WAL + busy-timeout DSN, runs `CREATE TABLE IF NOT EXISTS`, sets connection pool limits), and `Write(ctx context.Context, check *models.HealthCheck, result *models.CheckResult, retention int)` (INSERT only; `retention` parameter accepted but eviction deferred to US3), `Close() error` in `internal/history/store.go`
+- [X] T011 [US1] Add `history HistoryRecorder` field and `SetHistoryRecorder(h HistoryRecorder)` method to `Scheduler` in `internal/healthcheck/scheduler.go`; add nil-safe `if s.history != nil { s.history.Record(&check, result) }` call in `executeHealthCheck` after `RecordCheckUp`
+- [X] T012 [US1] Implement `Recorder` in `internal/history/recorder.go`: buffered channel (const `256`), `NewRecorder(store ExecutionStore, logger *slog.Logger)`, non-blocking `Record()` with `slog.Warn` on drop, `Start(ctx context.Context)` background goroutine with `defer recover()` and error log, `Stop()` that drains remaining jobs (up to 5 s timeout) then calls `store.Close()`
+- [X] T013 [US1] Wire history in `cmd/watchdawg/main.go`: after metrics setup, if `cfg.History != nil` open `SQLiteStore` (fail-fast with `logger.Error` + `os.Exit(1)` on error), create `Recorder`, call `scheduler.SetHistoryRecorder(recorder)`, `go recorder.Start(metricsCtx)`, defer `recorder.Stop()`; compute effective opt-in per check: `cfg.History.RecordAll || check.Record`
 
 **Checkpoint**: US1 complete — configure `"record": true` on any check; records write to SQLite and survive restart
 
@@ -72,15 +72,15 @@ testing of each story.
 
 ### Unit Tests for US2
 
-- [ ] T015 [P] [US2] Add unit tests for `SQLiteStore.QueryCheck` and `QueryAll` in `internal/history/store_test.go`: found returns records newest-first; not-found returns `ErrNotFound`; `limit` is respected; multiple check names are isolated correctly
-- [ ] T017 [P] [US2] Write unit tests for `Handler` in `internal/history/api_test.go`: `GET /history/{check_name}` → 200 with records; 404 on not found; 400 on invalid limit; `GET /history/*` → 200 with empty `checks` map; 200 with records from multiple checks; default limit (100) applied when absent
+- [X] T015 [P] [US2] Add unit tests for `SQLiteStore.QueryCheck` and `QueryAll` in `internal/history/store_test.go`: found returns records newest-first; not-found returns `ErrNotFound`; `limit` is respected; multiple check names are isolated correctly
+- [X] T017 [P] [US2] Write unit tests for `Handler` in `internal/history/api_test.go`: `GET /history/{check_name}` → 200 with records; 404 on not found; 400 on invalid limit; `GET /history/*` → 200 with empty `checks` map; 200 with records from multiple checks; default limit (100) applied when absent
 
 ### Implementation for US2
 
-- [ ] T014 [US2] Add `QueryCheck(ctx context.Context, checkName string, limit int) ([]Record, error)` and `QueryAll(ctx context.Context, limit int) (map[string][]Record, error)` methods plus `ErrNotFound` sentinel error to `internal/history/store.go`
-- [ ] T016 [US2] Create `internal/history/api.go`: `Handler` struct, `NewHandler(store ExecutionStore, logger *slog.Logger)`, `RegisterRoutes(mux *http.ServeMux)`; implement `GET /history/{check_name}` (200 / 404 / 400) and `GET /history/*` (200 / 400); both return `{"checks":{...}}`; default limit 100; timestamps serialised as RFC3339
-- [ ] T018 [P] [US2] Add `RegisterRoutes(mux *http.ServeMux)` method to `MetricsServer` in `internal/metrics/server.go` that registers `/metrics` on the given mux; refactor `Start()` to create its own mux and call `RegisterRoutes` on it (no change to the existing `Start(ctx)` signature or behaviour); add `Address() string` accessor returning `cfg.Address`
-- [ ] T019 [US2] Update `cmd/watchdawg/main.go`: when both `cfg.History != nil` and `metricsServer != nil`, create a shared `*http.ServeMux`, call `metricsServer.RegisterRoutes(sharedMux)` and `historyHandler.RegisterRoutes(sharedMux)`, start one `http.Server` on `metricsServer.Address()`; fall back to `metricsServer.Start(metricsCtx)` when only metrics is configured
+- [X] T014 [US2] Add `QueryCheck(ctx context.Context, checkName string, limit int) ([]Record, error)` and `QueryAll(ctx context.Context, limit int) (map[string][]Record, error)` methods plus `ErrNotFound` sentinel error to `internal/history/store.go`
+- [X] T016 [US2] Create `internal/history/api.go`: `Handler` struct, `NewHandler(store ExecutionStore, logger *slog.Logger)`, `RegisterRoutes(mux *http.ServeMux)`; implement `GET /history/{check_name}` (200 / 404 / 400) and `GET /history/*` (200 / 400); both return `{"checks":{...}}`; default limit 100; timestamps serialised as RFC3339
+- [X] T018 [P] [US2] Add `RegisterRoutes(mux *http.ServeMux)` method to `MetricsServer` in `internal/metrics/server.go` that registers `/metrics` on the given mux; refactor `Start()` to create its own mux and call `RegisterRoutes` on it (no change to the existing `Start(ctx)` signature or behaviour); add `Address() string` accessor returning `cfg.Address`
+- [X] T019 [US2] Update `cmd/watchdawg/main.go`: when both `cfg.History != nil` and `metricsServer != nil`, create a shared `*http.ServeMux`, call `metricsServer.RegisterRoutes(sharedMux)` and `historyHandler.RegisterRoutes(sharedMux)`, start one `http.Server` on `metricsServer.Address()`; fall back to `metricsServer.Start(metricsCtx)` when only metrics is configured
 
 **Checkpoint**: US2 complete — history API live on metrics port; both endpoints return correct, ordered records
 
@@ -94,13 +94,13 @@ testing of each story.
 
 ### Unit Tests for US3
 
-- [ ] T021 [P] [US3] Add eviction unit tests in `internal/history/store_test.go`: row count stays at retention limit after N writes; oldest records are evicted (not newest); per-check `Retention` override beats global default; unconfigured per-check retention resolves to global default of 1000
-- [ ] T023 [P] [US3] Add unit tests for per-check retention config in `internal/config/loader_test.go`: per-check `retention: 0` accepted (resolves to global at write time); explicit positive value accepted; negative value rejected with path-scoped error
+- [X] T021 [P] [US3] Add eviction unit tests in `internal/history/store_test.go`: row count stays at retention limit after N writes; oldest records are evicted (not newest); per-check `Retention` override beats global default; unconfigured per-check retention resolves to global default of 1000
+- [X] T023 [P] [US3] Add unit tests for per-check retention config in `internal/config/loader_test.go`: per-check `retention: 0` accepted (resolves to global at write time); explicit positive value accepted; negative value rejected with path-scoped error
 
 ### Implementation for US3
 
-- [ ] T020 [US3] Add eviction `DELETE` to `SQLiteStore.Write` in `internal/history/store.go` inside the same transaction: `DELETE FROM execution_records WHERE check_name = ? AND id NOT IN (SELECT id FROM execution_records WHERE check_name = ? ORDER BY timestamp DESC LIMIT ?)`; compute effective retention in `Recorder.Record`: `check.Retention` if `> 0`, else `cfg.Retention`; pass result to `store.Write`
-- [ ] T022 [P] [US3] Add per-check `Retention` propagation note to `internal/config/loader.go`: if per-check `Retention == 0`, leave as zero (Recorder resolves to global default at write time); add a code comment documenting the resolution rule
+- [X] T020 [US3] Add eviction `DELETE` to `SQLiteStore.Write` in `internal/history/store.go` inside the same transaction: `DELETE FROM execution_records WHERE check_name = ? AND id NOT IN (SELECT id FROM execution_records WHERE check_name = ? ORDER BY timestamp DESC LIMIT ?)`; compute effective retention in `Recorder.Record`: `check.Retention` if `> 0`, else `cfg.Retention`; pass result to `store.Write`
+- [X] T022 [P] [US3] Add per-check `Retention` propagation note to `internal/config/loader.go`: if per-check `Retention == 0`, leave as zero (Recorder resolves to global default at write time); add a code comment documenting the resolution rule
 
 **Checkpoint**: All three user stories functional — store is bounded, API returns correct data, recording survives restarts
 
@@ -112,10 +112,10 @@ testing of each story.
 
 > ⚠️ Integration tests require Docker Compose — **ask before running** (see CLAUDE.md).
 
-- [ ] T024 [P] Add integration test for recording in `integration-tests/tests/test_history.py`: configure a check with `record: true`; run several scheduler ticks; stop daemon; restart; assert records persist and all fields are correct
-- [ ] T025 [P] Add integration test for `record_all_healthchecks` in `integration-tests/tests/test_history.py`: configure `history.record_all_healthchecks: true` with no per-check `record` field; verify all checks produce history records
-- [ ] T026 [P] Add integration test for history API in `integration-tests/tests/test_history.py`: call `GET /history/{check_name}` and `GET /history/*`; assert HTTP 200, correct record count, newest-first ordering, correct `error` field on failed executions; assert 404 for unknown check name
-- [ ] T027 Run `go test ./...` and verify all unit tests pass; fix any regressions before marking complete
+- [X] T024 [P] Add integration test for recording in `integration-tests/tests/test_history.py`: configure a check with `record: true`; run several scheduler ticks; stop daemon; restart; assert records persist and all fields are correct
+- [X] T025 [P] Add integration test for `record_all_healthchecks` in `integration-tests/tests/test_history.py`: configure `history.record_all_healthchecks: true` with no per-check `record` field; verify all checks produce history records
+- [X] T026 [P] Add integration test for history API in `integration-tests/tests/test_history.py`: call `GET /history/{check_name}` and `GET /history/*`; assert HTTP 200, correct record count, newest-first ordering, correct `error` field on failed executions; assert 404 for unknown check name
+- [X] T027 Run `go test ./...` and verify all unit tests pass; fix any regressions before marking complete
 
 ---
 

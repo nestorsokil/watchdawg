@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	Metrics      *MetricsConfig `json:"metrics,omitempty"`
+	History      *HistoryConfig `json:"history,omitempty"`
 	HealthChecks []HealthCheck  `json:"healthchecks"`
 }
 
@@ -16,6 +17,14 @@ type MetricsConfig struct {
 	// Type is the metrics exposition format. Only "prometheus" is supported; defaults to "prometheus".
 	Type    string `json:"type"`
 	Address string `json:"address"` // host:port to bind the metrics HTTP server
+}
+
+// HistoryConfig controls execution history recording and the REST API for querying it.
+// The history block is optional; omitting it disables recording entirely with zero impact on checks.
+type HistoryConfig struct {
+	DBPath    string `json:"db_path"`
+	Retention int    `json:"retention,omitempty"`
+	RecordAll bool   `json:"record_all_healthchecks,omitempty"`
 }
 
 type HealthCheck struct {
@@ -30,6 +39,9 @@ type HealthCheck struct {
 	GRPC      *GRPCCheckConfig     `json:"grpc,omitempty"`
 	OnSuccess []HookConfig         `json:"on_success,omitempty"`
 	OnFailure []HookConfig         `json:"on_failure,omitempty"`
+
+	Record    bool `json:"record,omitempty"`    // opt this check into execution history recording
+	Retention int  `json:"retention,omitempty"` // per-check retention override; 0 = use global default
 }
 
 

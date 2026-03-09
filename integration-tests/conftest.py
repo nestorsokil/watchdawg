@@ -6,6 +6,7 @@ from stubs import webhook_receiver
 from stubs import healthcheck_target as _healthcheck_target_mod
 from stubs import kafka_hooks as _kafka_hooks_mod
 from stubs import grpc_stub as _grpc_stub_mod
+from utils.history import HistoryAPI
 
 logging.getLogger("kafka").setLevel(logging.WARNING)
 
@@ -61,3 +62,8 @@ def kafka_hooks():
     _kafka_hooks_mod.clear()
     yield _kafka_hooks_mod.KafkaHooks()
     _kafka_hooks_mod.clear()
+
+
+@pytest.fixture
+def history_api():
+    return HistoryAPI()

@@ -12,7 +12,7 @@ Represents a single top-level check execution (after all retries).
 
 | Field        | Type     | Constraints              | Notes                                      |
 |--------------|----------|--------------------------|--------------------------------------------|
-| `id`         | INTEGER  | PK, AUTOINCREMENT        | Internal row identifier; used for eviction |
+| `id`         | TEXT     | PK, UUID v4              | Generated at write time; used for eviction |
 | `check_name` | TEXT     | NOT NULL                 | Matches `HealthCheck.Name`                 |
 | `timestamp`  | INTEGER  | NOT NULL                 | Unix nanoseconds; when execution started   |
 | `healthy`    | INTEGER  | NOT NULL, 0 or 1         | `1` = pass, `0` = fail                     |
@@ -48,7 +48,7 @@ Effective retention for a check = `check.Retention` if > 0, else `config.History
 
 ```sql
 CREATE TABLE IF NOT EXISTS execution_records (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          TEXT    PRIMARY KEY,             -- UUID v4, generated at write time
     check_name  TEXT    NOT NULL,
     timestamp   INTEGER NOT NULL,
     healthy     INTEGER NOT NULL,

@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 
@@ -81,37 +80,16 @@ func NewMetricsServer(cfg *models.MetricsConfig, logger *slog.Logger) *MetricsSe
 	}
 }
 
-// Start binds the HTTP server and serves /metrics until ctx is cancelled.
-// The caller should run this in a goroutine; it returns when the server shuts down.
-func (s *MetricsServer) Start(ctx context.Context) error {
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{
+// Address returns the configured host:port for the metrics HTTP server.
+func (s *MetricsServer) Address() string {
+	return s.cfg.Address
+}
+
+// Handler returns the Prometheus HTTP handler for the /metrics endpoint.
+func (s *MetricsServer) Handler() http.Handler {
+	return promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{
 		ErrorLog: slog.NewLogLogger(s.logger.Handler(), slog.LevelError),
-	}))
-
-	srv := &http.Server{
-		Addr:    s.cfg.Address,
-		Handler: mux,
-	}
-
-	errCh := make(chan error, 1)
-	go func() {
-		s.logger.Info("Metrics server listening", "address", s.cfg.Address)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errCh <- err
-		}
-		close(errCh)
-	}()
-
-	select {
-	case <-ctx.Done():
-		if err := srv.Shutdown(context.Background()); err != nil {
-			s.logger.Error("Metrics server shutdown error", "error", err)
-		}
-		return <-errCh
-	case err := <-errCh:
-		return err
-	}
+	})
 }
 
 func (s *MetricsServer) RecordCheckAttempt(checkName string, healthy bool, durationSec float64) {

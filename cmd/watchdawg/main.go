@@ -4,12 +4,14 @@ import (
 	"context"
 	"flag"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"watchdawg/internal/config"
 	"watchdawg/internal/healthcheck"
+	"watchdawg/internal/history"
 	"watchdawg/internal/metrics"
 )
 
@@ -48,28 +50,63 @@ func main() {
 		}
 	}
 
+	httpCtx, httpCancel := context.WithCancel(context.Background())
+	defer httpCancel()
+
+	// History setup: open store, wire recorder, start background goroutine.
+	var histRecorder *history.Recorder
+	if cfg.History != nil {
+		store, err := history.NewSQLiteStore(cfg.History, logger)
+		if err != nil {
+			logger.Error("Failed to open history store", "path", cfg.History.DBPath, "error", err)
+			os.Exit(1)
+		}
+		histRecorder = history.NewRecorder(store, cfg.History.Retention, logger)
+		scheduler.SetHistoryRecorder(histRecorder, cfg.History)
+
+		go histRecorder.Start(httpCtx)
+		defer histRecorder.Stop()
+
+		if metricsServer != nil {
+			mux := http.NewServeMux()
+			mux.Handle("/metrics", metricsServer.Handler())
+			mux.Handle("/history/", history.NewHandler(store, logger).Handler())
+			startHTTPServer(metricsServer.Address(), mux, httpCtx, logger)
+		}
+	} else if metricsServer != nil {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", metricsServer.Handler())
+		startHTTPServer(metricsServer.Address(), mux, httpCtx, logger)
+	}
+
 	scheduler.Start()
 	logger.Info("Health checks are running. Press Ctrl+C to stop.")
-
-	metricsCtx, metricsCancel := context.WithCancel(context.Background())
-	defer metricsCancel()
-
-	if metricsServer != nil {
-		go func() {
-			if err := metricsServer.Start(metricsCtx); err != nil {
-				logger.Error("Metrics server stopped with error", "error", err)
-			}
-		}()
-	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
 
 	logger.Info("Received shutdown signal")
-	metricsCancel()
+	httpCancel()
 	scheduler.Stop()
 	logger.Info("WatchDawg stopped")
+}
+
+// startHTTPServer starts a shared http.Server on addr in a goroutine and shuts it down when ctx is cancelled.
+func startHTTPServer(addr string, mux *http.ServeMux, ctx context.Context, logger *slog.Logger) {
+	srv := &http.Server{Addr: addr, Handler: mux}
+	go func() {
+		logger.Info("HTTP server listening", "address", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("HTTP server stopped with error", "error", err)
+		}
+	}()
+	go func() {
+		<-ctx.Done()
+		if err := srv.Shutdown(context.Background()); err != nil {
+			logger.Error("HTTP server shutdown error", "error", err)
+		}
+	}()
 }
 
 func buildLogger() *slog.Logger {

@@ -142,6 +142,24 @@ func validateConfig(config *models.Config) error {
 		}
 	}
 
+	if config.History != nil {
+		if config.History.DBPath == "" {
+			return fmt.Errorf("history.db_path is required when history block is present")
+		}
+		if config.History.Retention == 0 {
+			config.History.Retention = 1000
+		}
+		if config.History.Retention < 0 {
+			return fmt.Errorf("history.retention must be a positive integer")
+		}
+		for i, check := range config.HealthChecks {
+			if check.Retention < 0 {
+				return fmt.Errorf("healthcheck[%d] (%s): retention must be a positive integer", i, check.Name)
+			}
+			// Per-check retention of 0 is valid: Recorder resolves it to the global default at write time.
+		}
+	}
+
 	return nil
 }
 
