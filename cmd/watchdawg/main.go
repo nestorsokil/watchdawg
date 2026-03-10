@@ -20,7 +20,7 @@ func main() {
 	logger := buildLogger()
 	slog.SetDefault(logger)
 
-	logger.Info("WatchDawg - Dynamic Health Checking Service")
+	logger.Info("Watchdawg - Dynamic Health Checking Service")
 
 	configPath := flag.String("config", "config.json", "Path to configuration file")
 	flag.Parse()
@@ -90,7 +90,7 @@ func main() {
 	logger.Info("Received shutdown signal")
 	httpCancel()
 	scheduler.Stop()
-	logger.Info("WatchDawg stopped")
+	logger.Info("Watchdawg stopped")
 }
 
 // startHTTPServer starts a shared http.Server on addr in a goroutine and shuts it down when ctx is cancelled.

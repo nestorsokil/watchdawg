@@ -5,7 +5,7 @@
 
 ## Summary
 
-Add opt-in execution history recording to WatchDawg: each scheduled check execution (after
+Add opt-in execution history recording to Watchdawg: each scheduled check execution (after
 all retries) can be persisted to a local SQLite database and queried via a REST API co-hosted
 on the Prometheus metrics port. Recording is decoupled from the check hot-path via an async
 channel. The feature is implemented as a plugin — the `internal/history` package is wired in

@@ -9,14 +9,14 @@
 **Decision**: `modernc.org/sqlite` (pure-Go, CGO-free)
 
 **Rationale**:
-- WatchDawg is built as a single static binary. `mattn/go-sqlite3` requires CGO, which
+- Watchdawg is built as a single static binary. `mattn/go-sqlite3` requires CGO, which
   complicates cross-compilation and CI builds. `modernc.org/sqlite` is a transpilation of
   the SQLite C source to pure Go — no CGO, no C compiler, standard `go build` works everywhere.
 - Implements the `database/sql` interface (`sql.DB`), so we use standard Go database patterns.
 - Supports all standard SQLite PRAGMAs including WAL mode.
 - Backed by Tailscale; widely deployed in production Go services.
 - Minor performance overhead vs CGO (~5–15% on write-heavy workloads) is irrelevant at
-  WatchDawg's write rate (one record per check per schedule interval).
+  Watchdawg's write rate (one record per check per schedule interval).
 
 **Alternatives considered**:
 - `mattn/go-sqlite3`: CGO required → rejected (breaks single-binary cross-compilation).
@@ -50,7 +50,7 @@ db.SetMaxIdleConns(4)
 **Decision**: On-write eviction (delete oldest records in the same transaction as the insert)
 
 **Rationale**:
-- WatchDawg is the only writer to this SQLite file. The store can only grow when WatchDawg
+- Watchdawg is the only writer to this SQLite file. The store can only grow when Watchdawg
   inserts a record, so evicting on insert is sufficient and deterministic.
 - Eviction is atomic: a single `DELETE … WHERE id NOT IN (SELECT id … ORDER BY timestamp DESC
   LIMIT N)` runs in the same transaction as the INSERT. The table can never exceed the limit

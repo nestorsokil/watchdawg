@@ -44,7 +44,7 @@ def test_kafka_liveness(kafka_hooks):
     assert_that(message_age.load()).is_greater_than_or_equal_to(0)
 
     # Stop sending. After the check interval (5 s) the last message is stale →
-    # WatchDawg fires the on_failure hook to the failure Kafka topic.
+    # Watchdawg fires the on_failure hook to the failure Kafka topic.
     # Timeout is generous to account for scheduler jitter (up to 2× interval).
     kafka_hooks.expect_failure("kafka_liveness", timeout=30)
     wait_for(lambda: up.is_zero())

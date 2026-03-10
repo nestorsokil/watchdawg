@@ -2,7 +2,7 @@
 
 Starts background consumer threads that listen on the on_success and on_failure
 hook topics. Provides a producer helper to send messages to the target topic
-that WatchDawg monitors.
+that Watchdawg monitors.
 
 State is module-level so the session fixture owns the lifetime.
 """

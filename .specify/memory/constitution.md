@@ -2,7 +2,7 @@
 SYNC IMPACT REPORT
 ==================
 Version Change: (blank template) → 1.0.0
-Rationale: Initial ratification — all placeholder tokens replaced with WatchDawg-specific
+Rationale: Initial ratification — all placeholder tokens replaced with Watchdawg-specific
 content derived from exhaustive codebase analysis (March 2026).
 
 Added Principles:
@@ -19,7 +19,7 @@ Added Sections:
   - "Governance" (fully populated)
 
 Templates:
-  - ✅ .specify/templates/plan-template.md — Constitution Check updated with WatchDawg gates
+  - ✅ .specify/templates/plan-template.md — Constitution Check updated with Watchdawg gates
   - ✅ .specify/templates/tasks-template.md — Testing note updated to reflect Principle III
   - ✅ .specify/templates/spec-template.md — No structural changes needed
   - ✅ .specify/templates/agent-file-template.md — Auto-generated; no changes needed
@@ -28,13 +28,13 @@ Deferred TODOs:
   - None. RATIFICATION_DATE set to 2026-03-06 (first authoring date; treated as adoption date).
 -->
 
-# WatchDawg Constitution
+# Watchdawg Constitution
 
 ## Core Principles
 
 ### I. Operator-First Configuration
 
-WatchDawg has no UI. The config file and its error messages are the entire operator interface
+Watchdawg has no UI. The config file and its error messages are the entire operator interface
 at setup time. Configuration quality directly determines how fast a misconfiguration can be
 diagnosed and fixed.
 
@@ -50,12 +50,12 @@ diagnosed and fixed.
 - Environment variable expansion (`$VAR`, `${VAR}`) MUST work in all string fields, enabling
   secrets to stay out of config files.
 
-**Rationale**: Operators typically configure WatchDawg during incident setup or infra
+**Rationale**: Operators typically configure Watchdawg during incident setup or infra
 bootstrapping, not during leisurely development. Ambiguous errors waste time they don't have.
 
 ### II. Structured Observability
 
-Logs and metrics are the only window into a running WatchDawg process. Both MUST be
+Logs and metrics are the only window into a running Watchdawg process. Both MUST be
 consistent, complete, and machine-readable from day one — not retrofitted.
 
 **Logging**:
@@ -123,7 +123,7 @@ layers are necessary — neither substitutes for the other.
 
 ### IV. Explicit Concurrency and Lifecycle
 
-WatchDawg runs long-lived background goroutines and must shut down cleanly under signal.
+Watchdawg runs long-lived background goroutines and must shut down cleanly under signal.
 These properties require deliberate design, not ad-hoc goroutine spawning.
 
 - All I/O and blocking operations MUST accept and honour `context.Context`. Cancellation must
@@ -144,7 +144,7 @@ stuck processes under signal. Explicit contracts prevent both.
 
 ### V. Resource Efficiency
 
-WatchDawg may run for weeks or months. Resources allocated at startup MUST not grow
+Watchdawg may run for weeks or months. Resources allocated at startup MUST not grow
 unboundedly, and connections MUST be reused.
 
 - Long-lived I/O resources (HTTP clients, Kafka readers, Kafka writers) MUST be created once
@@ -163,7 +163,7 @@ incidents. Explicit resource management policies prevent gradual degradation.
 
 ### VI. Minimal Footprint
 
-WatchDawg is a daemon, not a platform. Every new capability must justify why it belongs here
+Watchdawg is a daemon, not a platform. Every new capability must justify why it belongs here
 rather than in a general-purpose monitoring tool.
 
 - The daemon MUST remain a single binary with no persistent storage, no UI, and no HTTP API
@@ -232,7 +232,7 @@ cat config.json | ./bin/watchdawg -config -
 ## Governance
 
 This constitution supersedes all other informal conventions. It is the binding technical
-contract for WatchDawg contributions.
+contract for Watchdawg contributions.
 
 **Amendment procedure**:
 

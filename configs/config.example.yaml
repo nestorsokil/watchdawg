@@ -8,7 +8,7 @@ healthchecks:
       url: https://api.example.com/health
       method: GET
       headers:
-        User-Agent: WatchDawg/1.0
+        User-Agent: Watchdawg/1.0
       expected:
         status_code: 200
     on_success:

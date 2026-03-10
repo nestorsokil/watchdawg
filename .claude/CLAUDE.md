@@ -1,8 +1,8 @@
-# WatchDawg - Claude Context
+# Watchdawg - Claude Context
 
 ## Purpose
 
-WatchDawg is a CLI health-checking daemon written in Go. It reads a JSON config file, runs scheduled health checks against external systems, and fires webhook notifications on success or failure. No HTTP server, no UI, no database — just a process that runs until interrupted.
+Watchdawg is a CLI health-checking daemon written in Go. It reads a JSON config file, runs scheduled health checks against external systems, and fires webhook notifications on success or failure. No HTTP server, no UI, no database — just a process that runs until interrupted.
 
 Supported check types: HTTP, gRPC, Kafka, Starlark scripts.
 Notification channels: HTTP webhooks, Kafka topics.

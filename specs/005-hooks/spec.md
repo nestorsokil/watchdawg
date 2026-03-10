@@ -8,7 +8,7 @@
 
 ### User Story 1 - HTTP Webhook Notification (Priority: P1)
 
-An operator wants to receive an HTTP POST request when a check transitions to unhealthy (or healthy), so they can integrate WatchDawg with their alerting or automation system.
+An operator wants to receive an HTTP POST request when a check transitions to unhealthy (or healthy), so they can integrate Watchdawg with their alerting or automation system.
 
 **Why this priority**: HTTP webhooks are the most common notification mechanism. This is the baseline use case for hooks.
 
@@ -90,5 +90,5 @@ An operator wants to control the content of hook notifications — e.g., to post
 
 - **SC-001**: An operator receives a notification within one schedule interval of a check state change
 - **SC-002**: All hooks in a list fire regardless of individual hook failures
-- **SC-003**: An operator can integrate WatchDawg notifications with any HTTP-based alerting system without modifying WatchDawg
+- **SC-003**: An operator can integrate Watchdawg notifications with any HTTP-based alerting system without modifying Watchdawg
 - **SC-004**: An operator can customize notification content to match downstream API contracts using template syntax

@@ -45,7 +45,7 @@ testing of each story.
 
 **Goal**: Each opted-in check execution writes one record to a local SQLite database that survives daemon restarts. A check is opted in if `record: true` or `record_all_healthchecks: true`.
 
-**Independent Test**: Configure one check with `"record": true`, run WatchDawg for a few ticks, stop it, restart it, verify records are still present and accurate.
+**Independent Test**: Configure one check with `"record": true`, run Watchdawg for a few ticks, stop it, restart it, verify records are still present and accurate.
 
 ### Unit Tests for US1
 

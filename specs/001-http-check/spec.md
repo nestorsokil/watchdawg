@@ -95,4 +95,4 @@ An operator wants to validate response body content beyond status codes, using a
 - **SC-001**: An operator can detect a down endpoint within one schedule interval
 - **SC-002**: An operator can distinguish network failures from validation failures by inspecting the result
 - **SC-003**: Retry behaviour allows transient failures to resolve without triggering false alarms
-- **SC-004**: An operator can write a custom assertion that validates any aspect of the response body without modifying WatchDawg
+- **SC-004**: An operator can write a custom assertion that validates any aspect of the response body without modifying Watchdawg

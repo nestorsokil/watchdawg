@@ -1,7 +1,7 @@
 apiVersion: 1
 providers:
-  - name: WatchDawg
-    folder: WatchDawg
+  - name: Watchdawg
+    folder: Watchdawg
     type: file
     options:
       path: /var/lib/grafana/dashboards
