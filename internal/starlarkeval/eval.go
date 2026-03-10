@@ -306,9 +306,11 @@ func extractCheckResult(globals starlark.StringDict) (healthy bool, message stri
 		return healthy, message
 	}
 
+	healthyExplicit := false
 	if healthyVal, ok := globals["healthy"]; ok {
 		if boolVal, ok := healthyVal.(starlark.Bool); ok {
 			healthy = bool(boolVal)
+			healthyExplicit = true
 		}
 	}
 
@@ -319,9 +321,11 @@ func extractCheckResult(globals starlark.StringDict) (healthy bool, message stri
 	}
 
 	// No explicit result: default to healthy.
-	healthy = true
-	if message == "" {
+	if !healthyExplicit && message == "" {
+		healthy = true
 		message = "Starlark check completed"
+	} else if !healthyExplicit {
+		healthy = true
 	}
 
 	return healthy, message

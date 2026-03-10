@@ -1,10 +1,21 @@
 {
+  "metrics": {
+    "type": "prometheus",
+    "address": "127.0.0.1:9090"
+  },
+  "history": {
+    "db_path": "./watchdawg.db",
+    "retention": 1000,
+    "record_all_healthchecks": false
+  },
   "healthchecks": [
     {
       "name": "api-health",
       "schedule": "30s",
       "retries": 2,
       "timeout": 5000000000,
+      "record": true,
+      "retention": 500,
       "http": {
         "url": "https://api.example.com/health",
         "method": "GET",

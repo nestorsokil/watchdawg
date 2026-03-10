@@ -2,12 +2,18 @@
   "metrics": {
     "address": ":9091"
   },
+  "history": {
+    "db_path": "/tmp/watchdawg-history.db",
+    "retention": 1000,
+    "record_all_healthchecks": true
+  },
   "healthchecks": [
     {
       "name": "dynamic_check",
       "schedule": "3s",
       "retries": 0,
       "timeout": 2000000000,
+      "record": true,
       "http": {
         "url": "http://integration-tests:8080/target/health/dynamic_check",
         "method": "GET"

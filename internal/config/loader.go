@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -139,6 +140,33 @@ func validateConfig(config *models.Config) error {
 		}
 		if config.Metrics.Type != "prometheus" {
 			return fmt.Errorf("metrics.type %q is not supported; only \"prometheus\" is supported", config.Metrics.Type)
+		}
+	}
+
+	if config.History != nil {
+		if config.History.DBPath == "" {
+			return fmt.Errorf("history.db_path is required when history block is present")
+		}
+		if strings.HasPrefix(config.History.DBPath, ":") {
+			return fmt.Errorf("history.db_path must be a filesystem path, not a SQLite special value")
+		}
+		if strings.ContainsAny(config.History.DBPath, "?&#") {
+			return fmt.Errorf("history.db_path must not contain URI query characters (?, &, #)")
+		}
+		if strings.Contains(filepath.Clean(config.History.DBPath), "..") {
+			return fmt.Errorf("history.db_path must not contain path traversal components")
+		}
+		if config.History.Retention == 0 {
+			config.History.Retention = 1000
+		}
+		if config.History.Retention < 0 {
+			return fmt.Errorf("history.retention must be non-negative")
+		}
+		for i, check := range config.HealthChecks {
+			if check.Retention < 0 {
+				return fmt.Errorf("healthcheck[%d] (%s): retention must be a positive integer", i, check.Name)
+			}
+			// Per-check retention of 0 is valid: Recorder resolves it to the global default at write time.
 		}
 	}
 

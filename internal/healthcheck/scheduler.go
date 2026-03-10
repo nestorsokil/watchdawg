@@ -48,6 +48,8 @@ type Scheduler struct {
 	checkers []Checker
 	notifier *HookNotifier
 	recorder MetricsRecorder
+	history    HistoryRecorder       // nil when history is not configured
+	historyCfg *models.HistoryConfig // nil when history is not configured
 	logger   *slog.Logger
 	// rootCtx is cancelled in Stop to signal background workers (e.g. Kafka consumers).
 	rootCtx    context.Context
@@ -76,6 +78,13 @@ func NewScheduler(logger *slog.Logger, recorder MetricsRecorder) *Scheduler {
 		rootCtx:    rootCtx,
 		rootCancel: rootCancel,
 	}
+}
+
+// SetHistoryRecorder attaches a HistoryRecorder and its config to the scheduler.
+// Must be called before Start(). Passing nil disables recording.
+func (s *Scheduler) SetHistoryRecorder(h HistoryRecorder, cfg *models.HistoryConfig) {
+	s.history = h
+	s.historyCfg = cfg
 }
 
 func (s *Scheduler) AddHealthCheck(check models.HealthCheck) error {
@@ -167,6 +176,10 @@ func (s *Scheduler) executeHealthCheck(check models.HealthCheck, checker Checker
 	result := checker.Execute(ctx, &check)
 
 	s.recorder.RecordCheckUp(check.Name, result.Healthy)
+
+	if s.history != nil && (s.historyCfg.RecordAllChecks || check.Record) {
+		s.history.Record(&check, result)
+	}
 
 	if result.Healthy {
 		s.logger.Info("Health check passed",
