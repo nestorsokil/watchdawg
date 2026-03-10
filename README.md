@@ -9,68 +9,61 @@
 
 # Watchdawg
 
-A dynamic, extensible healthchecking service built with Go that executes user-defined health checks and sends webhook notifications on success or failure.
+A dynamic, extensible health-checking daemon written in Go. It reads a JSON config file, runs scheduled health checks against external systems, and fires webhook notifications on success or failure.
 
 ## Features
 
 - **Multiple Check Types**
-  - HTTP health checks with customizable methods, headers, and expected status codes
-  - Starlark-based checks for complex custom logic
-  - Support for retries and timeouts
-  - Future support planned for gRPC and Kafka
+  - HTTP checks with customizable methods, headers, expected status codes, and Starlark assertions
+  - gRPC standard health protocol (`grpc.health.v1.Health/Check`)
+  - Kafka consumer liveness — checks that messages arrive within the schedule interval
+  - Starlark-based checks for arbitrary custom logic
+  - Retries and per-check timeouts
 
 - **Flexible Scheduling**
-  - Simple interval format (`30s`, `5m`, `1h`)
-  - Standard cron expressions
-  - Per-check scheduling configuration
+  - Interval format: `30s`, `5m`, `1h`, `2h30m`
+  - Standard cron expressions (seconds precision)
 
 - **Webhook Notifications**
-  - Success and failure webhooks
-  - Customizable request methods and headers
-  - Template support for custom notification formats
+  - HTTP and Kafka notification hooks
+  - Multiple hooks per success/failure event (fired in parallel)
+  - Go template support for custom notification bodies
 
-- **Extensibility**
-  - Starlark scripts for response validation
-  - Starlark-only checks for complex scenarios
-  - HTTP client available to Starlark scripts (future)
+- **Execution History**
+  - Optional SQLite-backed result store
+  - Global and per-check retention limits
+  - Opt-in recording per check or globally
+
+- **Monitoring**
+  - Optional Prometheus metrics exposition
 
 ## Quick Start
 
 ### Prerequisites
 
-- Go 1.25 or higher
+- Go 1.24 or higher
 
 ### Installation
 
 ```bash
-# Clone the repository
 git clone <your-repo-url>
 cd watchdawg
-
-# Build
 go build -o bin/watchdawg ./cmd/watchdawg
 ```
 
 ### Basic Usage
 
-1. Create a configuration file (or use the example):
-
 ```bash
-cp config.example.json config.json
-# Edit config.json with your health checks
-```
+cp configs/config.example.json configs/config.json
+# Edit configs/config.json with your health checks
 
-2. Run Watchdawg:
-
-```bash
-./bin/watchdawg -config config.json
+./bin/watchdawg -config configs/config.json
+LOG_FORMAT=json ./bin/watchdawg -config configs/config.json  # JSON logs
 ```
 
 ## Configuration
 
 ### Loading Config
-
-Watchdawg supports three config sources:
 
 **File (default)**
 ```bash
@@ -106,30 +99,39 @@ Variables are expanded from the process environment before parsing. Unset variab
 
 ```json
 {
+  "metrics": {
+    "type": "prometheus",
+    "address": "127.0.0.1:9090"
+  },
+  "history": {
+    "db_path": "./watchdawg.db",
+    "retention": 1000
+  },
   "healthchecks": [
     {
       "name": "my-api-check",
-      "type": "http",
       "schedule": "30s",
       "retries": 2,
       "timeout": 5000000000,
-      "http": { /* HTTP config */ },
-      "on_success": { /* webhook config */ },
-      "on_failure": { /* webhook config */ }
+      "http": { },
+      "on_success": [ { "http": { } } ],
+      "on_failure": [ { "http": { } } ]
     }
   ]
 }
 ```
 
+The check type is determined by which key is present (`http`, `starlark`, `kafka`, or `grpc`) — exactly one must be set per check.
+
+`timeout` is in nanoseconds (`5000000000` = 5s). Defaults to 30s if omitted.
+
 ### Check Types
 
 #### HTTP Checks
 
-Basic HTTP check:
 ```json
 {
   "name": "api-health",
-  "type": "http",
   "schedule": "1m",
   "retries": 3,
   "timeout": 10000000000,
@@ -146,58 +148,35 @@ Basic HTTP check:
 }
 ```
 
-HTTP check with multiple acceptable status codes:
-```json
-{
-  "name": "api-with-validation",
-  "type": "http",
-  "schedule": "1m",
-  "retries": 3,
-  "timeout": 10000000000,
-  "http": {
-    "url": "https://api.example.com/data",
-    "method": "GET",
-    "expected": {
-      "status_code": [200, 201, 202]
-    },
-    "assertion": "'success' in body"
-  }
-}
-```
-
-HTTP check with JSON parsing and simple expression:
+HTTP check with JSON assertion:
 ```json
 {
   "name": "api-json-validation",
-  "type": "http",
   "schedule": "1m",
   "retries": 2,
   "timeout": 10000000000,
   "http": {
-    "url": "https://api.example.com/product",
+    "url": "https://api.example.com/status",
     "method": "GET",
     "expected": {
       "status_code": 200,
       "format": "json"
     },
-    "assertion": "result['product_sku'] == 10012"
+    "assertion": "result['status'] == 'healthy' and result.get('uptime', 0) > 0"
   }
 }
 ```
 
-HTTP check with header validation and assertion:
+HTTP check with multiple acceptable status codes and header validation:
 ```json
 {
   "name": "api-with-headers-check",
-  "type": "http",
   "schedule": "1m",
-  "retries": 3,
-  "timeout": 10000000000,
   "http": {
     "url": "https://api.example.com/data",
     "method": "GET",
     "expected": {
-      "status_code": 200,
+      "status_code": [200, 201, 202],
       "format": "json",
       "headers": {
         "Content-Type": "application/json"
@@ -208,14 +187,11 @@ HTTP check with header validation and assertion:
 }
 ```
 
-HTTP check with self-signed certificate (TLS verification disabled):
+HTTP check with TLS verification disabled (e.g. self-signed certs):
 ```json
 {
   "name": "dev-api-health",
-  "type": "http",
   "schedule": "1m",
-  "retries": 2,
-  "timeout": 10000000000,
   "http": {
     "url": "https://dev-api.example.com/health",
     "method": "GET",
@@ -229,80 +205,107 @@ HTTP check with self-signed certificate (TLS verification disabled):
 
 #### Expected Response Configuration
 
-The `expected` object defines what constitutes a successful response:
-
-```json
-"expected": {
-  "status_code": 200,           // Required: Single status code
-  // OR
-  "status_code": [200, 201, 202], // Required: Array of acceptable codes
-
-  "format": "json",             // Optional: "json" or "xml" - auto-parses body
-  "headers": {                  // Optional: Expected response headers
-    "Content-Type": "application/json"
-  },
-  "verify_tls": false           // Optional: Set to false to skip TLS cert validation
-}
-```
-
-**All fields except `status_code` are optional:**
-- **`status_code`** (required): Expected HTTP status code - can be a single integer (e.g., `200`) or an array of acceptable codes (e.g., `[200, 201, 202]`)
-- **`format`** (optional): Response format - `"json"` or `"xml"`. When set, body is parsed and available as `result` in assertions
-- **`headers`** (optional): Map of expected headers that must match exactly
-- **`verify_tls`** (optional): TLS certificate verification (default: `true`). Set to `false` to skip certificate validation - useful for self-signed certificates in dev/test environments
-
-**Note:** Response time limits are controlled by the `timeout` field at the health check level, not in the `expected` object.
+| Field | Required | Description |
+|---|---|---|
+| `status_code` | Yes | Single int or array of ints (e.g. `200` or `[200, 201]`) |
+| `format` | No | `"json"` or `"xml"` — parses body into `result` for assertions |
+| `headers` | No | Map of headers that must match exactly |
+| `verify_tls` | No | Default `true`. Set to `false` to skip TLS cert validation |
 
 #### Assertion Modes
 
-The `assertion` field supports three modes:
-
-**1. Simple Expression (recommended for basic checks)**
+**Simple expression** (recommended):
 ```json
 "assertion": "status_code == 200 and 'success' in body"
 ```
-- Single-line boolean expression
-- Automatically wrapped as `valid = <expression>`
-- No need to set variables
+Automatically wrapped as `valid = <expression>`. Available variables: `status_code`, `body`, `body_size`, `headers`, and `result` (when `format` is set).
 
-**2. Simple Expression with Parsed Data**
-```json
-"expected": {
-  "status_code": 200,
-  "format": "json"
-},
-"assertion": "result['status'] == 'healthy'"
-```
-- Use `format` to automatically parse JSON/XML responses
-- Access parsed data via the `result` variable
-- Clean, simple syntax for common validations
-
-**3. Full Starlark Script (for complex logic)**
+**Full Starlark script** (for complex logic):
 ```json
 "assertion": "valid = status_code == 200\nif valid:\n  message = 'Success'\nelse:\n  message = 'Failed'"
 ```
-- Multi-line scripts with full Starlark capabilities
-- Must explicitly set `valid` or `healthy` variables
-- Optional `message` variable for custom messages
+Must set `valid` (or `healthy`). Optionally set `message` for custom log output.
 
-#### Available Variables in Assertions
+#### gRPC Checks
 
-Without `format`:
-- `status_code` (int): HTTP status code
-- `body` (string): Response body
-- `body_size` (int): Size of response body in bytes
-- `headers` (dict): Response headers
+Uses the standard `grpc.health.v1.Health/Check` protocol.
 
-With `format: "json"` or `"xml"`:
-- All above variables, plus:
-- `result` (dict/list): Parsed JSON/XML response body
+```json
+{
+  "name": "grpc-server-health",
+  "schedule": "30s",
+  "retries": 2,
+  "timeout": 5000000000,
+  "grpc": {
+    "target": "myservice:50051",
+    "plaintext": true
+  }
+}
+```
+
+Check a specific service (leave `service` empty for a server-level check):
+```json
+{
+  "name": "grpc-service-health",
+  "schedule": "30s",
+  "grpc": {
+    "target": "myservice:50051",
+    "plaintext": true,
+    "service": "my.package.MyService"
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `target` | `host:port` of the gRPC server |
+| `plaintext` | Skip TLS (common for internal services) |
+| `verify_tls` | `false` to accept self-signed certs |
+| `service` | Fully-qualified service name; empty = server-level check |
+
+#### Kafka Checks
+
+Checks that at least one message was received on the topic within the schedule interval. Reports healthy while waiting for the first message after startup.
+
+> Kafka checks require a duration-format schedule (e.g. `30s`, `5m`) — cron expressions are not supported.
+
+```json
+{
+  "name": "order-events-liveness",
+  "schedule": "30s",
+  "timeout": 5000000000,
+  "kafka": {
+    "brokers": ["localhost:9092"],
+    "topic": "orders",
+    "group_id": "watchdawg-order-events"
+  }
+}
+```
+
+Kafka check with assertion on the latest message:
+```json
+{
+  "name": "payment-events-validation",
+  "schedule": "1m",
+  "timeout": 5000000000,
+  "kafka": {
+    "brokers": ["localhost:9092"],
+    "topic": "payments",
+    "format": "json",
+    "assertion": "result.get('status') in ('completed', 'pending')"
+  }
+}
+```
+
+Available assertion variables: `value` (string), `key` (string), `headers` (dict), `result` (parsed when `format` is set).
+
+`group_id` defaults to `watchdawg-<check-name>` if omitted.
 
 #### Starlark Checks
 
 ```json
 {
   "name": "custom-logic",
-  "type": "starlark",
   "schedule": "2m",
   "retries": 1,
   "timeout": 15000000000,
@@ -316,56 +319,93 @@ With `format: "json"` or `"xml"`:
 }
 ```
 
-### Scheduling
-
-Watchdawg supports two schedule formats:
-
-1. **Interval format**: `30s`, `5m`, `1h`, `2h30m`
-2. **Cron format**: `0 */5 * * * *` (with seconds)
+The script must set `healthy` (or `valid`) to a boolean. Optionally set `message`.
 
 ### Webhook Notifications
 
+`on_success` and `on_failure` are arrays of hook configs. Multiple hooks fire in parallel. Each entry is a tagged union with exactly one type key (`http` or `kafka`).
+
+**HTTP hook:**
 ```json
 {
-  "on_success": {
-    "url": "https://webhook.site/your-webhook",
-    "method": "POST",
-    "headers": {
-      "Content-Type": "application/json"
-    },
-    "body_template": "Check {{.CheckName}} passed at {{.Timestamp}}"
-  },
-  "on_failure": {
-    "url": "https://webhook.site/your-webhook",
-    "method": "POST",
-    "body_template": "ALERT: {{.CheckName}} failed: {{.Message}}"
+  "on_failure": [
+    {
+      "http": {
+        "url": "https://webhook.site/your-webhook",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body_template": "ALERT: {{.CheckName}} failed: {{.Message}}"
+      }
+    }
+  ]
+}
+```
+
+**Kafka hook:**
+```json
+{
+  "on_failure": [
+    {
+      "kafka": {
+        "brokers": ["localhost:9092"],
+        "topic": "health-alerts",
+        "message_template": "Check '{{.CheckName}}' failed: {{.Message}}"
+      }
+    }
+  ]
+}
+```
+
+**Multiple hooks:**
+```json
+{
+  "on_failure": [
+    { "http": { "url": "https://webhook.site/...", "method": "POST" } },
+    { "kafka": { "brokers": ["localhost:9092"], "topic": "health-alerts" } }
+  ]
+}
+```
+
+If `body_template`/`message_template` is omitted, the full check result is sent as JSON. Template variables: `{{.CheckName}}`, `{{.Message}}`, `{{.Timestamp}}`.
+
+### Execution History
+
+Add a `history` block to enable SQLite-backed result recording:
+
+```json
+{
+  "history": {
+    "db_path": "./watchdawg.db",
+    "retention": 1000,
+    "record_all_healthchecks": false
   }
 }
 ```
 
-If `body_template` is not provided, the full check result is sent as JSON.
+| Field | Description |
+|---|---|
+| `db_path` | Path to the SQLite database file |
+| `retention` | Max results to retain globally (default: 1000) |
+| `record_all_healthchecks` | If `true`, all checks are recorded automatically |
 
-## Project Structure
+Per-check recording (when `record_all_healthchecks` is false):
+```json
+{
+  "name": "api-health",
+  "record": true,
+  "retention": 500,
+  "http": { }
+}
+```
 
-```
-.
-├── cmd/
-│   └── watchdawg/              # Application entrypoint
-├── internal/
-│   ├── healthcheck/            # Health check executors
-│   │   ├── http.go            # HTTP health checker
-│   │   ├── starlark.go        # Starlark health checker
-│   │   ├── webhook.go         # Webhook notifier
-│   │   └── scheduler.go       # Check scheduler
-│   ├── config/                 # Configuration management
-│   │   └── loader.go          # Config file loader
-│   └── models/                 # Data models
-│       ├── config.go          # Configuration structures
-│       └── result.go          # Result structures
-├── config.json                 # Default configuration
-├── config.example.json         # Example configuration
-└── go.mod                      # Go module definition
-```
+### Scheduling
+
+| Format | Example | Description |
+|---|---|---|
+| Interval | `30s`, `5m`, `1h`, `2h30m` | Runs every N duration |
+| Cron | `0 */5 * * * *` | 6-field cron with seconds precision |
 
 ## Monitoring
 
@@ -381,10 +421,35 @@ docker compose up grafana
 
 Grafana will be available at `http://localhost:3000` with the dashboard pre-provisioned (anonymous read access enabled by default).
 
+## Project Structure
+
+```
+.
+├── cmd/
+│   └── watchdawg/              # Application entrypoint
+├── internal/
+│   ├── healthcheck/            # Scheduler, checkers, hooks, history
+│   │   ├── scheduler.go        # Check orchestration
+│   │   ├── http.go             # HTTP checker
+│   │   ├── grpc.go             # gRPC checker
+│   │   ├── kafka.go            # Kafka checker
+│   │   ├── starlark.go         # Starlark checker
+│   │   ├── hooks.go            # Hook dispatch (HTTP + Kafka)
+│   │   ├── history_recorder.go # Execution history persistence
+│   │   └── metrics_recorder.go # Prometheus metrics
+│   ├── config/                 # Config loading and validation
+│   ├── models/                 # Config and result types
+│   ├── starlarkeval/           # Shared Starlark execution utilities
+│   └── metrics/                # Prometheus metrics server
+├── configs/
+│   ├── config.example.json     # Full config reference
+│   └── config.example.yaml     # YAML equivalent reference
+└── integration-tests/          # Docker Compose + pytest integration tests
+```
+
 ## Roadmap
 
 - [ ] Starlark HTTP client for making requests from scripts
-- [ ] Check result history and reporting
 
 ## License
 
