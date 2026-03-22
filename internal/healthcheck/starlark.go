@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"go.starlark.net/starlark"
@@ -15,12 +16,17 @@ import (
 
 type StarlarkChecker struct {
 	noOpInitializer
+	client   *http.Client
 	logger   *slog.Logger
 	recorder MetricsRecorder
 }
 
 func NewStarlarkChecker(logger *slog.Logger, recorder MetricsRecorder) *StarlarkChecker {
-	return &StarlarkChecker{logger: logger, recorder: recorder}
+	return &StarlarkChecker{
+		client:   &http.Client{},
+		logger:   logger,
+		recorder: recorder,
+	}
 }
 
 func (s *StarlarkChecker) IsMatching(check *models.HealthCheck) bool { return check.Starlark != nil }
@@ -42,12 +48,19 @@ func (s *StarlarkChecker) executeOnce(ctx context.Context, check *models.HealthC
 
 	globals := s.buildGlobals(check)
 
+	maxBodyBytes := check.Starlark.MaxBodyBytes
+	if maxBodyBytes == 0 {
+		maxBodyBytes = 10 * 1024 * 1024 // 10 MB default
+	}
+
 	healthy, message, err := starlarkeval.RunCheckScript(
 		ctx,
 		fmt.Sprintf("healthcheck-%s", check.Name),
 		check.Name+".star",
 		check.Starlark.Script,
 		globals,
+		s.client,
+		maxBodyBytes,
 	)
 	if err != nil {
 		result.Healthy = false
@@ -72,9 +85,6 @@ func (s *StarlarkChecker) buildGlobals(check *models.HealthCheck) starlark.Strin
 			globals[key] = starlarkeval.ToStarlarkValue(value)
 		}
 	}
-
-	// TODO: Add HTTP client function for making requests from Starlark
-	// This will allow Starlark scripts to make HTTP calls
 
 	return globals
 }

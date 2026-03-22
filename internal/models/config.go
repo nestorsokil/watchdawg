@@ -134,6 +134,11 @@ type StarlarkCheckConfig struct {
 	// Script should return a dict: {"healthy": true/false, "message": "optional message"}
 	Script  string                 `json:"script"`
 	Globals map[string]interface{} `json:"globals,omitempty"`
+
+	// MaxBodyBytes caps the response body size for HTTP calls made via http_request
+	// within the script. Bodies exceeding this limit are truncated and the error field
+	// of the returned dict is set. Defaults to 10 MB when unset. Must be ≥ 1 if set.
+	MaxBodyBytes int `json:"max_body_bytes,omitempty"`
 }
 
 // KafkaCheckConfig defines a Kafka consumer health check.

@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -393,5 +395,63 @@ message = "always failing"`,
 	}
 	if result.Attempt != 2 {
 		t.Fatalf("expected Attempt=2 (last attempt), got %d", result.Attempt)
+	}
+}
+
+// ── http_request builtin (T008) ───────────────────────────────────────────────
+
+func TestExecute_StarlarkCheckCanCallHTTPRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("up"))
+	}))
+	defer srv.Close()
+
+	checker := NewStarlarkChecker(testLogger(), NoopMetricsRecorder{})
+	check := &models.HealthCheck{
+		Name:    "test-http-request",
+		Retries: 0,
+		Starlark: &models.StarlarkCheckConfig{
+			Script: `
+def check():
+    resp = http_request("` + srv.URL + `")
+    if resp["error"] != None:
+        return {"healthy": False, "message": "request failed: " + resp["error"]}
+    return {"healthy": resp["status_code"] == 200, "message": "status: " + str(resp["status_code"])}
+`,
+		},
+	}
+
+	result := checker.Execute(context.Background(), check)
+	if !result.Healthy {
+		t.Fatalf("expected healthy=true, got false (error: %s, message: %s)", result.Error, result.Message)
+	}
+	if !strings.Contains(result.Message, "200") {
+		t.Errorf("message should mention status 200, got %q", result.Message)
+	}
+}
+
+func TestExecute_StarlarkCheckHTTPRequestFailureUnhealthy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	checker := NewStarlarkChecker(testLogger(), NoopMetricsRecorder{})
+	check := &models.HealthCheck{
+		Name:    "test-http-request-fail",
+		Retries: 0,
+		Starlark: &models.StarlarkCheckConfig{
+			Script: `
+def check():
+    resp = http_request("` + srv.URL + `")
+    return {"healthy": resp["status_code"] == 200, "message": "status: " + str(resp["status_code"])}
+`,
+		},
+	}
+
+	result := checker.Execute(context.Background(), check)
+	if result.Healthy {
+		t.Fatal("expected healthy=false for non-200 response")
 	}
 }

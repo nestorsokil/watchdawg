@@ -208,5 +208,6 @@ func (h *HTTPChecker) validateWithStarlark(ctx context.Context, script string, e
 		globals["result"] = parsedResult
 	}
 
-	return starlarkeval.RunAssertionScript(ctx, "http-validation", "validation.star", script, globals)
+	const defaultMaxBodyBytes = 10 * 1024 * 1024 // 10 MB
+	return starlarkeval.RunAssertionScript(ctx, "http-validation", "validation.star", script, globals, h.client, defaultMaxBodyBytes)
 }

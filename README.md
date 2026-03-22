@@ -11,6 +11,30 @@
 
 A dynamic, extensible health-checking daemon written in Go. It reads a JSON config file, runs scheduled health checks against external systems, and fires webhook notifications on success or failure.
 
+## Architecture
+
+```mermaid
+flowchart TD
+    CFG[Config File / stdin] --> Loader[Config Loader]
+    Loader --> Scheduler
+
+    Scheduler -->|"schedule tick"| HTTP[HTTP Checker]
+    Scheduler -->|"schedule tick"| GRPC[gRPC Checker]
+    Scheduler -->|"schedule tick"| Kafka[Kafka Checker]
+    Scheduler -->|"schedule tick"| Starlark[Starlark Checker]
+
+    HTTP & GRPC & Kafka & Starlark --> Result[Check Result]
+
+    Result --> Metrics[Metrics Recorder]
+    Result --> History[History Recorder]
+    Result --> Hooks[Hook Dispatcher]
+
+    Metrics --> Prometheus[Prometheus Endpoint]
+    History --> SQLite[(SQLite DB)]
+    Hooks -->|parallel| WebhookHTTP[HTTP Webhook]
+    Hooks -->|parallel| WebhookKafka[Kafka Topic]
+```
+
 ## Features
 
 - **Multiple Check Types**
@@ -446,10 +470,6 @@ Grafana will be available at `http://localhost:3000` with the dashboard pre-prov
 │   └── config.example.yaml     # YAML equivalent reference
 └── integration-tests/          # Docker Compose + pytest integration tests
 ```
-
-## Roadmap
-
-- [ ] Starlark HTTP client for making requests from scripts
 
 ## License
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -53,6 +54,7 @@ type kafkaConsumerState struct {
 type KafkaChecker struct {
 	consumers map[string]*kafkaConsumerState
 	mu        sync.RWMutex
+	client    *http.Client
 	logger    *slog.Logger
 	recorder  MetricsRecorder
 	// newReader is injectable so tests can replace the real kafka.Reader.
@@ -62,6 +64,7 @@ type KafkaChecker struct {
 func NewKafkaChecker(logger *slog.Logger, recorder MetricsRecorder) *KafkaChecker {
 	return &KafkaChecker{
 		consumers: make(map[string]*kafkaConsumerState),
+		client:    &http.Client{},
 		logger:    logger,
 		recorder:  recorder,
 		newReader: func(brokers []string, topic, groupID string) kafkaReader {
@@ -278,7 +281,8 @@ func (k *KafkaChecker) validateWithStarlark(ctx context.Context, script string, 
 		globals["result"] = parsedResult
 	}
 
-	return starlarkeval.RunAssertionScript(ctx, "kafka-validation", "kafka-validation.star", script, globals)
+	const defaultMaxBodyBytes = 10 * 1024 * 1024 // 10 MB
+	return starlarkeval.RunAssertionScript(ctx, "kafka-validation", "kafka-validation.star", script, globals, k.client, defaultMaxBodyBytes)
 }
 
 // KafkaPublisher publishes messages to Kafka topics. It is co-located with the

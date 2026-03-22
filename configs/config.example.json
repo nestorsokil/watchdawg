@@ -126,11 +126,12 @@
       "retries": 1,
       "timeout": 15000000000,
       "starlark": {
-        "script": "# This script can make HTTP calls and perform custom logic\nhealthy = True\nmessage = 'Custom check passed'\n",
+        "script": "def check():\n    resp = http_request(api_url + '/health')\n    if resp['error'] != None:\n        return {'healthy': False, 'message': 'request failed: ' + resp['error']}\n    return {'healthy': resp['status_code'] == 200, 'message': 'status: ' + str(resp['status_code'])}\n",
         "globals": {
           "api_url": "https://api.example.com",
           "threshold": 100
-        }
+        },
+        "max_body_bytes": 1048576
       },
       "on_success": [
         {

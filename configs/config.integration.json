@@ -155,6 +155,31 @@
       ]
     },
     {
+      "name": "starlark_http_check",
+      "schedule": "3s",
+      "retries": 0,
+      "timeout": 2000000000,
+      "starlark": {
+        "script": "def check():\n    resp = http_request('http://integration-tests:8080/target/health/starlark_http_check')\n    if resp['error'] != None:\n        return {'healthy': False, 'message': 'request failed: ' + resp['error']}\n    return {'healthy': resp['status_code'] == 200, 'message': 'status: ' + str(resp['status_code'])}\n"
+      },
+      "on_success": [
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/success",
+            "method": "POST"
+          }
+        }
+      ],
+      "on_failure": [
+        {
+          "http": {
+            "url": "http://integration-tests:9090/callback/failure",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
       "name": "kafka_liveness",
       "schedule": "5s",
       "timeout": 10000000000,
