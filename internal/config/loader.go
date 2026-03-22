@@ -89,6 +89,12 @@ func validateConfig(config *models.Config) error {
 			if check.Starlark.Script == "" {
 				return fmt.Errorf("healthcheck[%d] (%s): Starlark script is required", i, check.Name)
 			}
+			if check.Starlark.MaxBodyBytes < 0 {
+				return fmt.Errorf("invalid check at index %d (%s): max_body_bytes must be positive", i, check.Name)
+			}
+			if check.Starlark.MaxBodyBytes == 0 {
+				config.HealthChecks[i].Starlark.MaxBodyBytes = 10 * 1024 * 1024 // 10 MB
+			}
 		case check.Kafka != nil:
 			if len(check.Kafka.Brokers) == 0 {
 				return fmt.Errorf("healthcheck[%d] (%s): at least one kafka broker is required", i, check.Name)

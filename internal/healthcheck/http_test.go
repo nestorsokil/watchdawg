@@ -709,3 +709,74 @@ func TestParseValidationResult_NotDict(t *testing.T) {
 		t.Fatal("expected error for non-dict input")
 	}
 }
+
+// ── http_request in assertion scripts (T012) ──────────────────────────────────
+
+func TestHTTPChecker_AssertionScriptCanCallHTTPRequest(t *testing.T) {
+	// Secondary endpoint that the assertion script calls.
+	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("side-effect-ok"))
+	}))
+	defer secondary.Close()
+
+	// Primary endpoint that the HTTP check targets.
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("primary-ok"))
+	}))
+	defer primary.Close()
+
+	checker := NewHTTPChecker(testLogger(), NoopMetricsRecorder{})
+	check := &models.HealthCheck{
+		Name:    "test-assertion-http-request",
+		Retries: 0,
+		HTTP: &models.HTTPCheckConfig{
+			URL:    primary.URL,
+			Method: "GET",
+			Expected: models.ExpectedHTTPResponse{
+				StatusCode: models.StatusCodeMatcher{Codes: []int{200}},
+			},
+			Assertion: `
+side = http_request("` + secondary.URL + `")
+valid = status_code == 200 and side["error"] == None and side["status_code"] == 200
+`,
+		},
+	}
+
+	result := checker.Execute(context.Background(), check)
+	if !result.Healthy {
+		t.Fatalf("expected healthy=true, got false (error: %s, message: %s)", result.Error, result.Message)
+	}
+}
+
+func TestHTTPChecker_AssertionScriptHTTPRequestErrorFails(t *testing.T) {
+	// Primary endpoint returns 200.
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer primary.Close()
+
+	checker := NewHTTPChecker(testLogger(), NoopMetricsRecorder{})
+	check := &models.HealthCheck{
+		Name:    "test-assertion-http-request-fail",
+		Retries: 0,
+		HTTP: &models.HTTPCheckConfig{
+			URL:    primary.URL,
+			Method: "GET",
+			Expected: models.ExpectedHTTPResponse{
+				StatusCode: models.StatusCodeMatcher{Codes: []int{200}},
+			},
+			// http_request to a port that is not listening — will set error field.
+			Assertion: `
+side = http_request("http://127.0.0.1:19998/never")
+valid = side["error"] == None
+`,
+		},
+	}
+
+	result := checker.Execute(context.Background(), check)
+	if result.Healthy {
+		t.Fatal("expected healthy=false when assertion's http_request fails")
+	}
+}

@@ -61,11 +61,17 @@ healthchecks:
     timeout: 15000000000
     starlark:
       script: |
-        healthy = True
-        message = 'Custom check passed'
+        def check():
+            resp = http_request(api_url + "/health")
+            if resp["error"] != None:
+                return {"healthy": False, "message": "request failed: " + resp["error"]}
+            if resp["status_code"] != 200:
+                return {"healthy": False, "message": "unexpected status: " + str(resp["status_code"])}
+            return {"healthy": True, "message": "ok"}
       globals:
         api_url: https://api.example.com
         threshold: 100
+      max_body_bytes: 1048576
     on_success:
       - http:
           url: https://webhook.site/your-success-webhook

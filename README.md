@@ -11,6 +11,30 @@
 
 A dynamic, extensible health-checking daemon written in Go. It reads a JSON config file, runs scheduled health checks against external systems, and fires webhook notifications on success or failure.
 
+## Architecture
+
+```mermaid
+flowchart TD
+    CFG[Config File / stdin] --> Loader[Config Loader]
+    Loader --> Scheduler
+
+    Scheduler -->|"schedule tick"| HTTP[HTTP Checker]
+    Scheduler -->|"schedule tick"| GRPC[gRPC Checker]
+    Scheduler -->|"schedule tick"| Kafka[Kafka Checker]
+    Scheduler -->|"schedule tick"| Starlark[Starlark Checker]
+
+    HTTP & GRPC & Kafka & Starlark --> Result[Check Result]
+
+    Result --> Metrics[Metrics Recorder]
+    Result --> History[History Recorder]
+    Result --> Hooks[Hook Dispatcher]
+
+    Metrics --> Prometheus[Prometheus Endpoint]
+    History --> SQLite[(SQLite DB)]
+    Hooks -->|parallel| WebhookHTTP[HTTP Webhook]
+    Hooks -->|parallel| WebhookKafka[Kafka Topic]
+```
+
 ## Features
 
 - **Multiple Check Types**
@@ -303,23 +327,105 @@ Available assertion variables: `value` (string), `key` (string), `headers` (dict
 
 #### Starlark Checks
 
+Run arbitrary logic in a sandboxed [Starlark](https://github.com/google/starlark-go) script. The script can make outbound HTTP calls, inspect responses, and compute a health decision.
+
+**Script result** — use a `check()` function (recommended) or set globals directly:
+
+```python
+def check():
+    return {"healthy": True, "message": "all good"}
+
+# or equivalently:
+healthy = True
+message = "all good"
+```
+
+**Injected globals** — pass operator-defined values via `globals`:
+
 ```json
 {
   "name": "custom-logic",
   "schedule": "2m",
-  "retries": 1,
   "timeout": 15000000000,
   "starlark": {
-    "script": "healthy = True\nmessage = 'Check passed'\n",
-    "globals": {
-      "threshold": 100,
-      "api_url": "https://api.example.com"
-    }
+    "script": "def check():\n    return {\"healthy\": threshold < 90}\n",
+    "globals": { "threshold": 75 }
   }
 }
 ```
 
-The script must set `healthy` (or `valid`) to a boolean. Optionally set `message`.
+##### `http_request` — making outbound HTTP calls
+
+Every Starlark script has access to `http_request`, a built-in function for making HTTP calls from within a check or assertion:
+
+```python
+http_request(url, method="GET", body=None, headers=None)
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `url` | `str` | required | Full URL (`http://` or `https://`) |
+| `method` | `str` | `"GET"` | HTTP method — GET, POST, PUT, DELETE, PATCH, HEAD |
+| `body` | `str\|None` | `None` | Request body string |
+| `headers` | `dict\|None` | `None` | Additional request headers |
+
+The return value is always a dict:
+
+| Field | Type | Description |
+|---|---|---|
+| `status_code` | `int` | HTTP status code; `0` on network failure |
+| `headers` | `dict` | Response headers |
+| `body` | `str` | Response body (truncated at `max_body_bytes`) |
+| `error` | `str\|None` | `None` on success; error description on failure |
+
+Network errors set `error` and return `status_code=0` — they do not raise and do not crash the script. Always check `error` before using `status_code`.
+
+**Examples:**
+
+Simple GET:
+```python
+def check():
+    resp = http_request("https://api.example.com/health")
+    if resp["error"] != None:
+        return {"healthy": False, "message": resp["error"]}
+    return {"healthy": resp["status_code"] == 200}
+```
+
+POST with JSON body and custom headers:
+```python
+def check():
+    resp = http_request(
+        "https://api.example.com/verify",
+        method  = "POST",
+        body    = '{"key": "value"}',
+        headers = {"Content-Type": "application/json", "X-Token": token},
+    )
+    if resp["error"] != None:
+        return {"healthy": False, "message": resp["error"]}
+    return {"healthy": resp["status_code"] == 200, "message": resp["body"]}
+```
+
+Inspecting response headers:
+```python
+def check():
+    resp = http_request("https://cdn.example.com/asset")
+    if resp["error"] != None:
+        return {"healthy": False, "message": resp["error"]}
+    ct = resp["headers"].get("Content-Type", "")
+    return {"healthy": ct.startswith("application/json")}
+```
+
+`http_request` is also available in **assertion scripts** attached to HTTP and Kafka checks, enabling follow-up calls after the primary request completes.
+
+**Config fields:**
+
+| Field | Description |
+|---|---|
+| `script` | Starlark script body |
+| `globals` | Key-value pairs injected as script globals |
+| `max_body_bytes` | Cap on response body size for `http_request` calls (default: 10 MB) |
+
+The request is automatically cancelled when the check's `timeout` elapses.
 
 ### Webhook Notifications
 
@@ -446,11 +552,3 @@ Grafana will be available at `http://localhost:3000` with the dashboard pre-prov
 │   └── config.example.yaml     # YAML equivalent reference
 └── integration-tests/          # Docker Compose + pytest integration tests
 ```
-
-## Roadmap
-
-- [ ] Starlark HTTP client for making requests from scripts
-
-## License
-
-TBD

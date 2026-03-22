@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 
@@ -27,10 +28,14 @@ import (
 //  1. `result` dict containing a "valid" or "healthy" key
 //  2. `valid` or `healthy` bool global
 //  3. `message` string global
-func RunAssertionScript(ctx context.Context, threadName, filename, script string, globals starlark.StringDict) (valid bool, message string, err error) {
+//
+// client and maxBodyBytes configure the http_request builtin injected into the script globals.
+func RunAssertionScript(ctx context.Context, threadName, filename, script string, globals starlark.StringDict, client *http.Client, maxBodyBytes int) (valid bool, message string, err error) {
 	if ctx.Err() != nil {
 		return false, "", ctx.Err()
 	}
+
+	globals["http_request"] = NewHTTPRequestBuiltin(ctx, client, maxBodyBytes)
 
 	if IsSimpleExpression(script) {
 		script = fmt.Sprintf("valid = %s", script)
@@ -80,10 +85,13 @@ func RunAssertionScript(ctx context.Context, threadName, filename, script string
 //  3. Otherwise fall back to reading global variables: `result`, `healthy`, `message`
 //
 // When no explicit result is set the check defaults to healthy.
-func RunCheckScript(ctx context.Context, threadName, filename, script string, globals starlark.StringDict) (healthy bool, message string, err error) {
+// client and maxBodyBytes configure the http_request builtin injected into the script globals.
+func RunCheckScript(ctx context.Context, threadName, filename, script string, globals starlark.StringDict, client *http.Client, maxBodyBytes int) (healthy bool, message string, err error) {
 	if ctx.Err() != nil {
 		return false, "", ctx.Err()
 	}
+
+	globals["http_request"] = NewHTTPRequestBuiltin(ctx, client, maxBodyBytes)
 
 	thread := &starlark.Thread{Name: threadName}
 
